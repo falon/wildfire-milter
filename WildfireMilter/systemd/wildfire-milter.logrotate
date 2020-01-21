@@ -1,0 +1,13 @@
+/var/log/wildfire-milter/wildfire-milter.log {
+        create
+        notifempty
+        nomail
+        noolddir
+        missingok
+        daily
+        size 1024M
+        compress
+        create 0644 wildmilt wildmilt
+        su wildmilt wildmilt
+}
+

@@ -1,0 +1,15 @@
+[Unit]
+Description=Wildfire-Milter Service
+Wants=nss-lookup.target network.target remote-fs.target time-sync.target
+After=var-run.mount nss-lookup.target network.target remote-fs.target time-sync.target
+Before=mail-transfer-agent.target
+
+[Service]
+User=wildmilt
+Group=wildmilt
+ExecStart=/usr/bin/python3 /usr/bin/wildfire-milter.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=postfix.service

@@ -1,0 +1,120 @@
+## Wildfire Milter config file
+# This is a YAML-style config file
+# whitespace indentation is used for denoting structure; TAB chars are not allowed.
+#
+
+Milter:
+  # at postfix smtpd_milters = inet:127.0.0.1:4690
+  # bind to unix or tcp socket "inet:port@ip" or "/<path>/<to>/<something>.sock"
+  SOCKET: "inet:4690@127.0.0.1"
+  # Set umask for unix socket, e.g. 0077 for group writable
+  UMASK: 0077
+  # Milter timout in seconds
+  TIMEOUT: 300 
+  # How to handle the mail if a malware is detected (Reject/Discard/Defer/Accept)
+  ON_VIRUS: 'Reject'
+  # Reject error message (if ON_VIRUS = 'Reject')
+  MESSAGE: "Attachments contains threats"
+  # Add details on threats at the end of Reject MESSAGE (if ON_VIRUS = 'Reject')
+  REJECT_DETAIL: true
+  # Suspicious content is always considered clean.
+  # In place of Accept you can defer the mail if a suspicious content is detected.
+  # The content is immediately submitted to Wilfire for further analysis anyway.
+  # Apply only if ON_VIRUS = 'Reject/Discard/Defer'
+  DEFER_IF_SUSPECT: true
+  # Max nested archive depth - recommendation = 5
+  MAX_NESTED: 5
+
+Logging:
+  # Must be "syslog" or "file"
+  TYPE: 'syslog'
+  # Syslog Facility
+  SYSLOG_FAC: 'mail'
+  # Syslog socket
+  SYSLOG_SOCKET: '/dev/log'
+  # File dir
+  LOGFILE_DIR: "/var/log/wildfire-milter"
+  # File name
+  LOGFILE_NAME: "wildfire-milter.log"
+  # Log to stdout too (true/false)
+  # When you run on systemd, set to "false".
+  LOGSTDOUT: true
+
+Multitask:
+  # This program supplies two parallel task for asynch op:
+  # - one for writing to Redis cache.
+  # - one for submitting to Wildfire suspicious contents.
+  # You can choose to to this with processes or threads.
+  # Possible value: thread|process
+  # Default: thread
+  TYPE: thread
+  ## Queue Sizes for:
+  # Submit to Wildfire
+  # Default: 20
+  SIZE_SUBMIT: 20
+  # Write hash to Redis
+  # Default: 4
+  SIZE_REDIS: 4
+
+Redis:
+  HOST: 'localhost'
+  PORT: 6379
+  AUTH: 'foobared'
+  #  DB for cache
+  DB: 0
+  # DB to avoid duplicate submission
+  DBSUB: 1
+  # TTL
+  # You can safely set a value greater than the policy interval (1day)
+  # and often run wfverdictchange to keep changes in synch.
+  TTL: 86400
+
+Wildfire:
+  KEY: '<YOUR API KEY>'
+  HOST: 'eu.wildfire.paloaltonetworks.com'
+  # Submit all attachments of a mail in a single API call to reduce the number of calls.
+  # If you don't have policy issue keep it false, each attachment is analyzed separately,
+  # with minimum  memory and load usage.
+  OPTIMIZE_CALL: true
+  # Stop at first positive
+  # When you analyze a mail, at first positive stop the process and return the verdicts.
+  # More efficient, but you could miss the submit of new threats and a complete log.
+  STOP_AT_POSITIVE: true
+  # Working temp dir used to submit unknown suspicious attachment to Wildfire
+  TMPDIR: '/run/wildfire-milter'
+
+AcceptedMIME:
+  - type: 'application/x-dosexec'
+    size: 10
+  - type: 'application/msword'
+    size: 2
+  - type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    size: 2
+  - type: 'application/vnd.ms-excel'
+    size: 2
+  - type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    size: 2
+  - type: 'application/java-archive'
+    size: 5
+  - type: 'application/x-rar'
+    size: 10
+  - type: 'application/pdf'
+    size: 1
+  - type: 'application/x-shockwave-flash'
+    size: 5
+  - type: 'application/x-7z-compressed'
+    size: 10
+
+
+Whitelist:
+  # Add (comma separated json format) some whitelisted recipients or sender to the list to skip the check
+  # ["xyz@example.de","test@test.de"]
+  Envelopes:
+  # - "example@host.com"
+    - "sender@example.com"
+  # Add a SHA256 hash of attachment - to obtain these hash please see in the log for "key=<...>"
+  # example: 05357f85049ba05fb9c7cdc9c6e979b0cb9db600a78eaf98a39344db2f6a6473
+  # Please define as json: ["hash#1","hash#2"]
+  Hash:
+  # - "05357f85049ba05fb9c7cdc9c6e979b0cb9db600a78eaf98a39344db2f6a6473"
+    - ""

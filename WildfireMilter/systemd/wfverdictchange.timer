@@ -1,0 +1,10 @@
+[Unit]
+Description=Wildfire Verdict Change Updater timer
+Wants=wildfire-milter.service
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec = 600
+
+[Install]
+WantedBy=multi-user.target

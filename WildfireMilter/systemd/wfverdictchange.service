@@ -1,0 +1,11 @@
+[Unit]
+Description=Wildfire Verdict Change Updater
+Wants=nss-lookup.target network.target remote-fs.target time-sync.target
+
+[Service]
+User=wildmilt
+Group=wildmilt
+ExecStart=/usr/bin/python3 /usr/bin/wfverdictchange.py
+
+[Install]
+WantedBy=multi-user.target

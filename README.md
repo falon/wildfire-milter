@@ -60,6 +60,9 @@ Notables configurable options:
   API call to Wildfire to ask a verdict change. But you can also looking for the file hash in logs, and add that hash in
   the permanent whitelist.
 
+## Installation
+See at [INSTALL](INSTALL.md) instructions.
+
 ## Credits
 - pymilter https://pymilter.org/pymilter/ by Stuart D. Gathman
 - patool http://wummel.github.io/patool/ by wummel

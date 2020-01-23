@@ -8,8 +8,6 @@ Before=mail-transfer-agent.target
 User=wildmilt
 Group=wildmilt
 ExecStart=/usr/bin/python3 /usr/bin/wildfire-milter.py
-StandardOutput=file:/dev/null
-StandardError=file:/dev/null
 Restart=always
 
 [Install]

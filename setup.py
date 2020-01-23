@@ -18,7 +18,7 @@ setup(
     },
     data_files=[
         ('/etc/wildfire-milter', ['WildfireMilter/etc/milter.conf.dist']),
-        ('/usr/share/doc/wildfire-milter', ['README.md']),
+        ('/usr/share/doc/wildfire-milter', ['README.md', 'INSTALL.md']),
         ('/usr/share/licenses/wildfire-milter', ['LICENSE']),
         ('/usr/lib/systemd/system', ['WildfireMilter/systemd/wfverdictchange.service',
                                      'WildfireMilter/systemd/wildfire-milter.service',

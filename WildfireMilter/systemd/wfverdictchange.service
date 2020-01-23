@@ -6,6 +6,8 @@ Wants=nss-lookup.target network.target remote-fs.target time-sync.target
 User=wildmilt
 Group=wildmilt
 ExecStart=/usr/bin/python3 /usr/bin/wfverdictchange.py
+StandardOutput=file:/dev/null
+StandardError=file:/dev/null
 
 [Install]
 WantedBy=multi-user.target

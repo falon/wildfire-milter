@@ -20,8 +20,6 @@
 # - redis-py https://pypi.org/project/redis/ by  Andy McCurdy
 # - python-magic https://github.com/ahupp/python-magic by Adam Hupp
 #
-# TODO: exclude-list of mimetypes to never submit to Wildfire
-#       in place of current hardcoded 'application/pdf'.
 # TODO: handle exception if milter SOCKET can't open.
 # TODO: manage config reload without milter restart.
 # TODO: add systemd notify

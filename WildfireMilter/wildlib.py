@@ -313,7 +313,7 @@ def check_verdicts(redis, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_di
                     thisvalue = int(verdict.text)
                     log.info("%saction=<wildfire_multiget> name=<%s> key=<%s> value=<%s> result=<success>" % (
                     prefixlog, wildattachs[thishash]['name'], thishash, thisvalue))
-                    if thisvalue == -102 and type != 'application/pdf':
+                    if thisvalue == -102:
                         ### Submit to wildfire
                         attach = wildattachs[thishash]['content']
                         if  'threading' in  sys.modules and wf_queue is not None:
@@ -388,7 +388,7 @@ def check_verdict(redis, redis_sub, redis_ttl, wildapi, attachment_obj, tmp_dir=
             kvalue = int(verdict.text)
             log.info("%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<success>" % (
                 prefixlog, fname, hash, kvalue))
-            if kvalue == -102 and type != 'application/pdf':
+            if kvalue == -102:
                 ## Submit to wildfire
                 if  'threading' in  sys.modules and wf_queue is not None:
                     args = (redis_ttl, hash, attachment, tmp_dir, prefixlog + 'name=<%s> ' % fname)

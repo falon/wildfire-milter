@@ -21,7 +21,7 @@ loggerName = 'wildfire'
 def set_log(handler_type, socket, facility, stdout=False, filepath=False):
     log = logging.getLogger(loggerName)
     log.setLevel(logging.DEBUG)
-    formatter_syslog = logging.Formatter('%(module)s/%(funcName)s: %(levelname)s: %(message)s')
+    formatter_syslog = logging.Formatter('%(module)s[%(process)d]: %(message)s')
     formatter_stdout = logging.Formatter('%(module)-16s[%(process)d]/%(funcName)-15s: %(levelname)8s: %(message)s')
     formatter_file   = logging.Formatter('%(asctime)s %(module)s[%(process)d]/%(funcName)s: %(levelname)8s: %(message)s')
 

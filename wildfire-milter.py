@@ -171,6 +171,7 @@ class WildfireMilter(Milter.Base):
         self.H = None
         self.fp = None
         self.R = []  # list of recipients
+        self.nexthop = [] # list of nexthop
         self.fp = BytesIO()
         self.queueid = None
         self.id = Milter.uniqueID()  # Integer incremented with each call.
@@ -204,7 +205,7 @@ class WildfireMilter(Milter.Base):
 
     @Milter.noreply
     def envfrom(self, mailfrom, *str):
-        self.fromparms = Milter.dictfromlist(str)  # ESMTP parms
+        self.fromparms = Milter.param2dict(str)  # ESMTP parms
         self.user = self.getsymval('{auth_authen}')  # authenticated user
         self.canon_from = '@'.join(parse_addr(mailfrom))
         self.fp.write(b"From %s %s\n" % (codecs.encode(self.canon_from, 'utf-8'), codecs.encode(time.ctime(), 'utf-8')))
@@ -212,8 +213,10 @@ class WildfireMilter(Milter.Base):
 
     @Milter.noreply
     def envrcpt(self, to, *str):
-        rcptinfo = to, Milter.dictfromlist(str)
-        self.R.append(rcptinfo)
+        toparms = Milter.param2dict(str)
+        self.R.append(to)
+        if self.getsymval('{rcpt_host}') not in self.nexthop:
+            self.nexthop.append(self.getsymval('{rcpt_host}'))
         return Milter.CONTINUE
 
     @Milter.noreply
@@ -260,7 +263,7 @@ class WildfireMilter(Milter.Base):
         # always called, even when abort is called.  Clean up
         # any external resources here.
         log = logging.getLogger(wildlib.loggerName)
-        log.info("milter_id=<%d> last_queueid=<%s> action=<close>", self.id, self.queueid)
+        log.info("milter_id=<%d> client_ip=<%s> client=<%s> last_queueid=<%s> action=<close>", self.id, self.IP, self.IPname, self.queueid)
         if self.fp:
             self.fp.close()
             self.fp = None
@@ -269,7 +272,7 @@ class WildfireMilter(Milter.Base):
     def abort(self):
         # client disconnected prematurely
         log = logging.getLogger(wildlib.loggerName)
-        log.debug("milter_id=<%d> queueid=<%s> action=<abort>", self.id, self.queueid)
+        log.debug("milter_id=<%d> client_ip=<%s> client=<%s> queueid=<%s> action=<abort>", self.id, self.IP, self.IPname, self.queueid)
         return Milter.CONTINUE
 
     ## === Support Functions ===
@@ -279,7 +282,7 @@ class WildfireMilter(Milter.Base):
         """
         global WhiteList
         msg_from = self.canon_from
-        msg_to = self.R
+        msg_to = ','.join(self.R)
 
         # return if not RFC char detected
         if "\'" in msg_from:
@@ -385,7 +388,7 @@ class WildfireMilter(Milter.Base):
             # Clean Message
             self.addheader('X-WildMilter-Status', 'Clean')
             log.info('milter_id=<%d> queue_id=<%s> status=<clean> milter_action=<%s> nexthop=<%s>',
-                     self.id, self.queueid, 'accept', self.getsymval('{mail_host}'))
+                     self.id, self.queueid, 'accept', ','.join(self.nexthop))
             return Milter.ACCEPT
 
         # Determine the class (threat or pending)

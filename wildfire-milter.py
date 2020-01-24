@@ -435,7 +435,7 @@ class WildfireMilter(Milter.Base):
                     self.addheader('X-WildMilter-Threats', '"%s" type="%s";' % (th['name'], th['type']))
                 self.addheader('X-WildMilter-Status', 'Infected')
                 log.warning('milter_id=<%d> queue_id=<%s> status=<threat> milter_action=<%s> nexthop=<%s>',
-                    self.id, self.queueid, 'accept', self.getsymval('{mail_host}'))
+                    self.id, self.queueid, 'accept', ','.join(self.nexthop))
                 return Milter.ACCEPT
         elif is_pending:
             if (MILTER_RETURN == 'reject' or MILTER_RETURN == 'defer' or MILTER_RETURN == 'discard') and DEFER:
@@ -448,13 +448,13 @@ class WildfireMilter(Milter.Base):
                 for sp in susp_list:
                     self.addheader('X-WildMilter-Threats', "name=<%s>" % sp)
                 log.warning('milter_id=<%d> queue_id=<%s> status=<suspicious> milter_action=<%s> nexthop=<%s>',
-                    self.id, self.queueid, 'accept', self.getsymval('{mail_host}'))
+                    self.id, self.queueid, 'accept', ','.join(self.nexthop))
                 return Milter.ACCEPT
         else:
             # Clean Message
             self.addheader('X-WildMilter-Status', 'Clean')
             log.debug('milter_id=<%d> queue_id=<%s> status=<clean> milter_action=<%s> nexthop=<%s>',
-                      self.id, self.queueid, 'accept', self.getsymval('{mail_host}'))
+                      self.id, self.queueid, 'accept', ','.join(self.nexthop))
             return Milter.ACCEPT
 
 

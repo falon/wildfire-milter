@@ -143,7 +143,9 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
                         fpath, fname = os.path.split(file_with_path)
                         fo = open(file_with_path, 'rb')
                         archiveWalk(fo, MAXNESTED, count + 1, contentdir + '/' + fpath, listfile, ACCEPTEDMIME, prefixlog)
-
+            except patoolib.util.PatoolError as err:
+                log = logging.getLogger(loggerName)
+                log.error('%sfilename=<%s> error=<%s>', prefixlog, fileobj.name, err)
             except Exception:
                 trackException('the archive ' + fileobj.name, prefixlog)
         elif count == 0:
@@ -187,9 +189,9 @@ def to_be_analyzed(fileobj, mtype, accepted_mime, prefixlog=''):
     return True if mtype is in accepted_mime types and of suitable size
     accepted_mime is a list of dictionary, such as:
         accepted_mime = [
-          {'type': 'application/x-dosexec', 'size': 10000000},
-          {'type': 'application/msword', 'size': 2000000},
-          {'type': 'application/java-archive', 'size': 5000000}
+          {'type': 'application/x-dosexec', 'size': 10},
+          {'type': 'application/msword', 'size': 2},
+          {'type': 'application/java-archive', 'size': 5}
         ]
     """
     result = False
@@ -271,7 +273,7 @@ def check_verdicts(redis, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_di
         if thisvalue is not None:
             thisvalue = thisvalue.decode('utf-8')
             listvalue.append({'name': attachment_name, 'verdict': int(thisvalue)})
-            if stop and thisvalue > 0:
+            if stop and int(thisvalue) > 0:
                 return listvalue
         else:
             # We have to ask to Wildfire

@@ -327,10 +327,16 @@ class WildfireMilter(Milter.Base):
                     filename = part.get_filename(None)
                     attachment = part.get_payload(decode=True)
 
-                    if attachment is None and filename is None:
+                    if attachment is None or filename is None:
+                    # The "or" is questionable. It could happen a text/plain part with no filename that magiclib
+                    # considers as something other. Who is wrong?
+                    # If I change to "and", then I must add:
+                    # if filename is None
+                    #   filename = 'noname'
+                    # before 'attachment_fileobj.name = filename' to prevent exception in cleanup.
                         log.debug('milter_id=<%d> queue_id=<%s> msg_part=<%d> content-type=<%r> filename=<%s> analyze=<False>' % (
                             self.id, self.queueid, count, content_type, filename))
-                        return Milter.CONTINUE
+                        continue
                     attachment_fileobj = BytesIO(attachment)
                     attachment_fileobj.name = filename
 

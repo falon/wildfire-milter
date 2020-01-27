@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='wildfire-milter',
-    version='0.1.post25',
+    version='0.1.post26',
     description='A milter which interfaces to Wildfire Palo Alto API',
     long_description=long_description,
     long_description_content_type="text/markdown",

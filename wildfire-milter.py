@@ -120,8 +120,8 @@ MILTER_RETURN = MILTER_RETURN.lower()
 if MILTER_RETURN not in ('reject', 'discard', 'accept', 'defer'):
     sys.exit("Please check the config file! ON_VIRUS must be any of Reject, Discard, Defer or Accept!")
 TASK_TYPE = TASK_TYPE.lower()
-if TASK_TYPE not in ('thread', 'process'):
-    sys.exit("Please check the config file! Multitask TYPE must be 'thread' or 'process' only")
+if TASK_TYPE not in ('thread', 'process', 'single'):
+    sys.exit("Please check the config file! Multitask TYPE must be 'single', 'thread' or 'process' only")
 
 if TASK_TYPE == 'process':
     from multiprocessing import Process as Thread, Queue
@@ -179,6 +179,7 @@ class WildfireMilter(Milter.Base):
     @Milter.noreply
     def connect(self, IPname, family, hostaddr):
         global bg_redis_write, bg_submit_wf
+        global TASK_TYPE, QSIZE_REDIS, QSIZE_SUBMIT
         print()
         # (self, 'ip068.subnet71.example.com', AF_INET, ('215.183.71.68', 4720) )
         # (self, 'ip6.mxout.example.com', AF_INET6,
@@ -195,10 +196,19 @@ class WildfireMilter(Milter.Base):
         log.info('milter_id=<%d> orig_client_ip=<%s> orig_client=<%s> client_ip=<%s> client=<%s> server_ip=<%s> server=<%s>' %
                  (self.id, self.getsymval('{client_addr}'), self.getsymval('{client_name}'), self.IP, IPname,
                   self.getsymval('{daemon_addr}'), self.getsymval('{daemon_name}')))
-        if not bg_redis_write.is_alive():
-            log.critical('milter_id=<%d> error=<process to write into Redis is dead>' % self.id)
-        if not bg_submit_wf.is_alive():
-            log.critical('milter_id=<%d> error=<process to submit sample for Wildfire is dead>'  % self.id)
+        if TASK_TYPE != 'single':
+            if not bg_redis_write.is_alive():
+                log.critical('milter_id=<%d> error=<The %s to write into Redis is dead.Try to restart...>',
+                             self.id, TASK_TYPE)
+                redisq = Queue(maxsize=QSIZE_REDIS)
+                bg_redis_write = Thread(target=redis_background_write, args=(redisq,))
+                bg_redis_write.start()
+            if not bg_submit_wf.is_alive():
+                log.critical('milter_id=<%d> error=<The %s to submit sample for Wildfire is dead. Try to restart...>',
+                         self.id, TASK_TYPE)
+                submitq = Queue(maxsize=QSIZE_SUBMIT)
+                bg_submit_wf = Thread(target=submit_wildfire_background, args=(submitq,))
+                bg_submit_wf.start()
         return Milter.CONTINUE
 
     @Milter.noreply
@@ -242,11 +252,14 @@ class WildfireMilter(Milter.Base):
         try:
             self.fp.seek(0)
             msg = email.message_from_bytes(self.fp.getvalue())
+            self.fp.close()
+            self.fp = None
             if self.envelope_is_in_whitelist():
                 self.addheader('X-WildMilter-Status', 'Whitelisted')
                 return Milter.ACCEPT
             else:
                 all_verdicts = self.checkforthreat(msg)
+                msg = None
                 return self.milter_result(all_verdicts)
 
         except Exception:
@@ -357,7 +370,7 @@ class WildfireMilter(Milter.Base):
                                 verdicts.append({'name': os.path.basename(anyfile.name), 'verdict': verdict})
                             if STOP_AT_POSITIVE and verdict > 0:
                                 break
-                        wildlib.cleanup(files_to_inspect, logadd)
+                        wildlib.cleanup(files_to_inspect, WILDTMPDIR, logadd)
                 else:
                     log.debug('milter_id=<%d> queue_id=<%s> msg_part=<%d> content-type=<%r> analyze=<False>' % (
                         self.id, self.queueid, count, content_type))
@@ -367,7 +380,7 @@ class WildfireMilter(Milter.Base):
                 logadd = "milter_id=<%d> queue_id=<%s> " % (self.id, self.queueid)
                 verdicts = wildlib.check_verdicts(r, rsub, REDISTTL, wfp, all_files_to_inspect, WILDTMPDIR,
                     STOP_AT_POSITIVE, Hash_Whitelist, redisq, submitq, logadd)
-                wildlib.cleanup(all_files_to_inspect, logadd)
+                wildlib.cleanup(all_files_to_inspect, WILDTMPDIR, logadd)
 
         except Exception:
             wildlib.trackException(action='the message', prefixlog=('milter_id=<%d> queue_id=<%s> ' % (self.id, self.queueid)))
@@ -553,17 +566,19 @@ def main():
     # set the "last" fall back to ACCEPT if exception occur
     Milter.set_exception_policy(Milter.ACCEPT)
 
-    bg_redis_write = Thread(target=redis_background_write, args=(redisq,))
-    bg_submit_wf   = Thread(target=submit_wildfire_background, args=(submitq,))
-    bg_redis_write.start()
-    bg_submit_wf.start()
+    if TASK_TYPE != 'single':
+        bg_redis_write = Thread(target=redis_background_write, args=(redisq,))
+        bg_submit_wf   = Thread(target=submit_wildfire_background, args=(submitq,))
+        bg_redis_write.start()
+        bg_submit_wf.start()
     # start the milter
     Milter.runmilter('WildfireMilter', SOCKET, TIMEOUT)
-    # Terminate the running threads.
-    redisq.put(None)
-    submitq.put(None)
-    bg_redis_write.join()
-    bg_submit_wf.join()
+    if TASK_TYPE != 'single':
+        # Terminate the running threads.
+        redisq.put(None)
+        submitq.put(None)
+        bg_redis_write.join()
+        bg_submit_wf.join()
 
     log.info('Wildfire Milter shutdown')
     print("\n*********** %s shutdown ***********\n" % 'WildfireMilter')

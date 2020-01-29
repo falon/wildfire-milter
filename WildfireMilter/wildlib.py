@@ -4,6 +4,8 @@ import hashlib
 import logging
 import logging.handlers
 import os
+from pathlib import PurePosixPath
+from shlex import quote
 import shutil
 import sys
 import tempfile
@@ -100,6 +102,7 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
         listfile = []
     if fileobj is None:
         return listfile
+    log = logging.getLogger(loggerName)
     fcontent = fileobj.read()
     magicType = magic.from_buffer(fcontent, mime=True)
     if to_be_analyzed(fileobj, magicType, ACCEPTEDMIME, prefixlog):
@@ -120,6 +123,8 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
             # Close the file to avoid the open file exception
             tmpfile.close()
             fileobj.close()
+            fcontent = None
+            log.debug('%saction=<free mem> result=<True> name=<%s>',prefixlog,fname)
         else:
             tmpfpath = fileobj.name
         if is_archive(tmpfpath):
@@ -144,7 +149,6 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
                         fo = open(file_with_path, 'rb')
                         archiveWalk(fo, MAXNESTED, count + 1, contentdir + '/' + fpath, listfile, ACCEPTEDMIME, prefixlog)
             except patoolib.util.PatoolError as err:
-                log = logging.getLogger(loggerName)
                 log.error('%sfilename=<%s> error=<%s>', prefixlog, fileobj.name, err)
             except Exception:
                 trackException('the archive ' + fileobj.name, prefixlog)
@@ -152,10 +156,15 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
             # This file is not an archive or to be analyzed, so it can be removed from fs.
             shutil.rmtree(tempdir)
         fileobj.close()
+        if fileobj.name is not None:
+            name_to_log = os.path.basename(tmpfpath)
+        else:
+            name_to_log = None
+        log.debug('%saction=<free mem> result=<True> name=<%s>', prefixlog, name_to_log)
     return listfile
 
 
-def cleanup(filelist=None, prefixlog=''):
+def cleanup(filelist=None, prefixfile='/tmp', prefixlog=''):
     """
     Clean all tree on one level above common path on filelist,
     in other words the temp path created by ArchiveWalk
@@ -165,23 +174,25 @@ def cleanup(filelist=None, prefixlog=''):
     log = logging.getLogger(loggerName)
     if len(filelist) == 0:
         return False
-    listp = []
+    already_del_list = []
     for fname in filelist:
-        listp.append(fname.name)
-        log.debug('%saction=<free mem> result=<True> name=<%s>' % (prefixlog, fname.name))
-        fname.close()
-    if listp is None:
-        return False
-    try:
-        cpath = os.path.commonpath(listp)
-        to_clean = os.path.dirname(cpath)
-        if to_clean:
-            shutil.rmtree(to_clean)
-            log.debug('%saction=<delete> result=<True> path=<%s>' % (prefixlog, to_clean))
-        return True
-    except Exception:
-        trackException('cleanup tmpdir', prefixlog)
-        return False
+        if fname.name.startswith(prefixfile):
+            # This is a temp file on fs
+            to_clean=prefixfile + '/' + PurePosixPath(fname.name).relative_to(prefixfile).parts[0]
+            try:
+                if to_clean not in already_del_list:
+                    shutil.rmtree(quote(to_clean))
+                    already_del_list.append(to_clean)
+                    log.debug('%saction=<delete> result=<True> path=<%s>' % (prefixlog, to_clean))
+            except:
+                trackException('cleanup tmpdir', prefixlog)
+                return False
+        try:
+            fname.close()
+            log.debug('%saction=<free mem> result=<True> name=<%s>' % (prefixlog, fname.name))
+        except:
+            trackException('<free mem>', prefixlog)
+    return True
 
 
 def to_be_analyzed(fileobj, mtype, accepted_mime, prefixlog=''):

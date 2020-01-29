@@ -228,8 +228,10 @@ def submit_verdict_to_wildfire(wildapi, redis, redis_ttl, digest, attachment, sp
     thisvalue = None
     # Ask to Redis to find out already submitted attachments
     thisvalue = redis.get(digest)
+    size = sys.getsizeof(attachment)
     if thisvalue is not None:
-        log.debug('%ssaction=<wildfire_submit> result=<already> detail=<part already submitted>' % prefixlog)
+        log.debug('%ssaction=<wildfire_submit> result=<already> detail=<part already submitted> size=<%d>',
+                  prefixlog, size)
         return True
     #
     # Submit to Wildfire
@@ -239,11 +241,12 @@ def submit_verdict_to_wildfire(wildapi, redis, redis_ttl, digest, attachment, sp
         try:
             wildapi.submit(fp.name)
             log.info(
-                '%saction=<wildfire_submit> result=<success> detail=<part submitted for further analysis>' % prefixlog)
+                '%saction=<wildfire_submit> result=<success> size=<%d> detail=<part submitted for further analysis>',
+                prefixlog, size)
             return_as = True
             add_to_redis(redis, digest, 1, redis_ttl, prefixlog)
         except pan.wfapi.PanWFapiError as msg:
-            log.error('%saction=<wildfire_submit> result=<fail> error=<%s>' % (prefixlog, msg))
+            log.error('%saction=<wildfire_submit> result=<fail> size=<%d> error=<%s>', prefixlog, size, msg)
             return_as = False
     return return_as
 

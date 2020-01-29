@@ -67,7 +67,7 @@ Maybe you should install some helper archive programs. So patool can work as exp
 with all archive formats. See at patool documentation.
 
 # Open Issue
-WildFire Milter eat a lot of memory. In a production environment with about 600 mails/300s
+WildFire Milter eats a lot of memory. In a production environment with about 600 mails/300s
 we can arrive at 3.5GB of RSS.
 In systemd we limit the memory to 3GB. Above this limit the system starts to swap.
 You can change this parameter in `wildfire-milter.service` systemd file:

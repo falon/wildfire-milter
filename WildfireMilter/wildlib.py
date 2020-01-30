@@ -149,7 +149,8 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
                         fo = open(file_with_path, 'rb')
                         archiveWalk(fo, MAXNESTED, count + 1, contentdir + '/' + fpath, listfile, ACCEPTEDMIME, prefixlog)
             except patoolib.util.PatoolError as err:
-                log.error('%sfilename=<%s> action=<deflate> error=<%s>', prefixlog, fileobj.name, err)
+                log.error('%sfilename=<%s> action=<deflate> error=<%s>',
+                          prefixlog, fileobj.name, str(err).replace('>','"').replace('<','"'))
             except Exception:
                 trackException('the archive ' + fileobj.name, prefixlog)
         elif count == 0:

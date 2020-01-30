@@ -30,6 +30,9 @@ Logging:
   TYPE: 'syslog'
   # Syslog Facility
   SYSLOG_FAC: 'mail'
+  # Minimum Log Level ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG')
+  # Suggested: DEBUG or INFO
+  LOG_LEVEL: 'DEBUG'
   # Syslog socket
   SYSLOG_SOCKET: '/dev/log'
   # File dir
@@ -73,7 +76,7 @@ Wildfire:
   KEY: '<YOUR API KEY>'
   HOST: 'eu.wildfire.paloaltonetworks.com'
   # Submit all attachments of a mail in a single API call to reduce the number of calls.
-  # If you don't have policy issue keep it false, each attachment is analyzed separately,
+  # If you don't have license issue keep it false, each attachment is analyzed separately,
   # with minimum  memory and load usage.
   OPTIMIZE_CALL: true
   # Stop at first positive

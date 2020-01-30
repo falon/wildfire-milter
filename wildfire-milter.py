@@ -79,6 +79,7 @@ if os.path.isfile(CONFIG):
     LOGSTDOUT = logging_parameters['LOGSTDOUT']
     LOGHANDLER = logging_parameters['TYPE']
     SYSLOG_FAC = logging_parameters['SYSLOG_FAC']
+    SYSLOG_LEVEL = logging_parameters['LOG_LEVEL']
     SYSLOG_SOCKET = logging_parameters['SYSLOG_SOCKET']
 
     redis_parameters =  wildlib.load_yaml(CONFIG, "Redis")
@@ -111,7 +112,7 @@ else:
 for confvar in (
         SOCKET, UMASK, TIMEOUT, DEFER, MESSAGE, MAX_NESTED_ARCHIVE, MILTER_RETURN, REJECT_DETAIL,
         LOGFILE_DIR, LOGFILE_NAME, LOGSTDOUT,
-        LOGHANDLER, SYSLOG_FAC, SYSLOG_SOCKET, REDISHOST, REDISPORT, REDISAUTH, REDISDB, DBSUB, REDISTTL,
+        LOGHANDLER, SYSLOG_FAC, SYSLOG_LEVEL, SYSLOG_SOCKET, REDISHOST, REDISPORT, REDISAUTH, REDISDB, DBSUB, REDISTTL,
         WILDHOST, WILDKEY, OPTIMIZE_APICALL, WILDTMPDIR, TASK_TYPE, QSIZE_SUBMIT, QSIZE_REDIS, ACCEPTED_MIME):
     if confvar is None:
         sys.exit("Please check the config file! Some parameters are missing. This is an YAML syntax file!")
@@ -149,7 +150,7 @@ p = Path(WILDTMPDIR)
 # The work dir should be created during the application setup really.
 p.mkdir(exist_ok=True)
 
-if not wildlib.set_log(LOGHANDLER, SYSLOG_SOCKET, SYSLOG_FAC, LOGSTDOUT, LOGFILE_PATH):
+if not wildlib.set_log(LOGHANDLER, SYSLOG_SOCKET, SYSLOG_FAC, SYSLOG_LEVEL, LOGSTDOUT, LOGFILE_PATH):
     print("Something wrong in log definition")
     sys.exit(1)
 log = logging.getLogger(wildlib.loggerName)
@@ -365,7 +366,7 @@ class WildfireMilter(Milter.Base):
                         all_files_to_inspect = all_files_to_inspect + files_to_inspect
                     else:
                         for anyfile in files_to_inspect:
-                            verdict = wildlib.check_verdict(r, rsub, REDISTTL, wfp, anyfile, WILDTMPDIR, Hash_Whitelist, logadd)
+                            verdict =wildlib.check_verdict(r, rsub, REDISTTL, wfp, anyfile, WILDTMPDIR, Hash_Whitelist, redisq, submitq, logadd)
                             if verdict:
                                 verdicts.append({'name': os.path.basename(anyfile.name), 'verdict': verdict})
                             if STOP_AT_POSITIVE and verdict > 0:

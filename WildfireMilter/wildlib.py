@@ -20,9 +20,9 @@ from patoolib import util
 
 loggerName = 'wildfire'
 
-def set_log(handler_type, socket, facility, stdout=False, filepath=False):
+def set_log(handler_type, socket, facility, level='INFO', stdout=False, filepath=False):
     log = logging.getLogger(loggerName)
-    log.setLevel(logging.DEBUG)
+    log.setLevel(level)
     formatter_syslog = logging.Formatter('%(module)s[%(process)d]: %(message)s')
     formatter_stdout = logging.Formatter('%(module)-16s[%(process)d]/%(funcName)-15s: %(levelname)8s: %(message)s')
     formatter_file   = logging.Formatter('%(asctime)s %(module)s[%(process)d]/%(funcName)s: %(levelname)8s: %(message)s')
@@ -30,7 +30,7 @@ def set_log(handler_type, socket, facility, stdout=False, filepath=False):
     if handler_type == 'syslog':
         handler_syslog = logging.handlers.SysLogHandler(address=socket, facility=facility)
         handler_syslog.setFormatter(formatter_syslog)
-        handler_syslog.setLevel(logging.DEBUG)
+        handler_syslog.setLevel(level)
         log.addHandler(handler_syslog)
     if handler_type == 'file':
         if not filepath:
@@ -38,12 +38,12 @@ def set_log(handler_type, socket, facility, stdout=False, filepath=False):
         oldumask = os.umask(0o0026)
         handler_file = logging.handlers.WatchedFileHandler(filepath, encoding='utf8')
         handler_file.setFormatter(formatter_file)
-        handler_file.setLevel(logging.DEBUG)
+        handler_file.setLevel(level)
         log.addHandler(handler_file)
         os.umask(oldumask)
     if stdout:
         handler_out = logging.StreamHandler(sys.stdout)
-        handler_out.setLevel(logging.DEBUG)
+        handler_out.setLevel(level)
         handler_out.setFormatter(formatter_stdout)
         log.addHandler(handler_out)
     return True
@@ -219,7 +219,11 @@ def to_be_analyzed(fileobj, mtype, accepted_mime, prefixlog=''):
         name_to_log = os.path.basename(fileobj.name)
     else:
         name_to_log = None
-    log.debug('%s action=<analyze> name=<%s> detected_type=<%s> size=<%d> analyze=<%r>' % (prefixlog, name_to_log, mtype, size, result))
+    eventlog = '%s action=<analyze> name=<%s> detected_type=<%s> size=<%d> analyze=<%r>'
+    if result:
+        log.info(eventlog, prefixlog, name_to_log, mtype, size, result)
+    else:
+        log.debug(eventlog, prefixlog, name_to_log, mtype, size, result)
     return result
 
 

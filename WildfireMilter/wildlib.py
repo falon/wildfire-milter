@@ -68,7 +68,7 @@ def hash_in_whitelist(Hash_Whitelist, wildhash, prefixlog=''):
        for hash in Hash_Whitelist:
          if hash not in (None, ''):
              if hash == wildhash:
-                log.info("%skey=<%s> result=<True> detail=<accepting attachment>",
+                log.info("%s action=<whitelist> key=<%s> result=<True> detail=<accepting attachment>",
                             prefixlog, hash)
                 return True
     return False
@@ -136,7 +136,7 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
                 if count >= MAXNESTED:
                     shutil.rmtree(tempdir)
                     raise TooManyArchivesException(
-                        "%s error=<Too many nested zips found - possible zipbomb!>" % prefixlog)
+                        "%s action=<deflate> error=<Too many nested zips found - possible zipbomb!>" % prefixlog)
                 # Otherwise proceed to deflate
                 contentdir = tempfile.mkdtemp(prefix='content_', dir=tempdir)
                 patoolib.extract_archive(tmpfpath, outdir=contentdir, verbosity=-1, interactive=False)
@@ -149,7 +149,7 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
                         fo = open(file_with_path, 'rb')
                         archiveWalk(fo, MAXNESTED, count + 1, contentdir + '/' + fpath, listfile, ACCEPTEDMIME, prefixlog)
             except patoolib.util.PatoolError as err:
-                log.error('%sfilename=<%s> error=<%s>', prefixlog, fileobj.name, err)
+                log.error('%sfilename=<%s> action=<deflate> error=<%s>', prefixlog, fileobj.name, err)
             except Exception:
                 trackException('the archive ' + fileobj.name, prefixlog)
         elif count == 0:
@@ -219,7 +219,7 @@ def to_be_analyzed(fileobj, mtype, accepted_mime, prefixlog=''):
         name_to_log = os.path.basename(fileobj.name)
     else:
         name_to_log = None
-    log.debug('%sname=<%s> detected_type=<%s> size=<%d> analyze=<%r>' % (prefixlog, name_to_log, mtype, size, result))
+    log.debug('%s action=<analyze> name=<%s> detected_type=<%s> size=<%d> analyze=<%r>' % (prefixlog, name_to_log, mtype, size, result))
     return result
 
 
@@ -230,7 +230,7 @@ def submit_verdict_to_wildfire(wildapi, redis, redis_ttl, digest, attachment, sp
     thisvalue = redis.get(digest)
     size = sys.getsizeof(attachment)
     if thisvalue is not None:
-        log.debug('%ssaction=<wildfire_submit> result=<already> detail=<part already submitted> size=<%d>',
+        log.debug('%saction=<wildfire_submit> result=<already> detail=<part already submitted> size=<%d>',
                   prefixlog, size)
         return True
     #
@@ -265,7 +265,7 @@ def add_to_redis(redis, key, value, redis_ttl, prefixlog):
             log.error("%saction=<redis_add> key=<%s> value=<%s> result=<fail> detail=<already exist>" % (
             prefixlog, key, value))
     except redis.RedisError as err:
-        log.error('%saction=<redis_error> key=<%s> value=<%s> err=<%s>' % (prefixlog, key, value, err))
+        log.error('%saction=<redis_add> key=<%s> value=<%s> error=<%s>' % (prefixlog, key, value, err))
     return result
 
 
@@ -303,16 +303,16 @@ def check_verdicts(redis, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_di
             result = wildapi.http_code
             reason = wildapi.http_reason
             log.critical(
-                '%saction=<wildfire_multiget> result=<fail> detail=<%s> result_code=<%d> result_reason=<%s>' % (
+                '%saction=<wildfire_multiget> result=<fail> detail=<%s> result_code=<%d> error=<%s>' % (
                 prefixlog, msg, result, reason))
             return False
         if wildapi.xml_element_root is None:
-            log.warning("%saction=<wildfire_multiget> result=<fail> detail=<empty API response>" % prefixlog)
+            log.warning("%saction=<wildfire_multiget> result=<fail> error=<empty API response>" % prefixlog)
             return False
         elem = wildapi.xml_element_root
         nelem = len(wildapi.xml_element_root.getchildren())
         if nelem != len(hashes):
-            log.error("%saction=<wildfire_multiget> result=<fail> detail=<malformed API response>" % prefixlog)
+            log.error("%saction=<wildfire_multiget> result=<fail> error=<malformed API response>" % prefixlog)
             return False
         for item in elem:
             thishash = None
@@ -322,7 +322,7 @@ def check_verdicts(redis, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_di
                     thishash = verdict.text
                     if thishash not in hashes:
                         log.error(
-                            "%saction=<wildfire_multiget> key=<%s> result=<fail> detail=<inconsistent API response>" % (
+                            "%saction=<wildfire_multiget> key=<%s> result=<fail> error=<inconsistent API response>" % (
                             prefixlog, thishash))
                         return False
                 if verdict.tag == 'verdict':
@@ -375,20 +375,20 @@ def check_verdict(redis, redis_sub, redis_ttl, wildapi, attachment_obj, tmp_dir=
         result = wildapi.http_code
         reason = wildapi.http_reason
         log.critical(
-            '%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<fail> detail=<%s> result_code=<%d> resuld_reason=<%s>' % (
+            '%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<fail> detail=<%s> result_code=<%d> error=<%s>' % (
             prefixlog, fname, hash, kvalue, msg, result, reason))
         return False
 
     if wildapi.xml_element_root is None:
         log.warning(
-            "%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<fail> detail=<empty API response>" % (
+            "%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<fail> error=<empty API response>" % (
             prefixlog, fname, hash, kvalue))
         return False
     elem = wildapi.xml_element_root
     nelem = len(wildapi.xml_element_root.getchildren())
     if nelem != 1:
         log.error(
-            "%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<fail> detail=<malformed API response>" % (
+            "%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<fail> error=<malformed API response>" % (
             prefixlog, fname, hash, kvalue))
         return False
 
@@ -397,7 +397,7 @@ def check_verdict(redis, redis_sub, redis_ttl, wildapi, attachment_obj, tmp_dir=
         if verdict.tag == 'sha256':
             if verdict.text != hash:
                 log.error(
-                    "%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<fail> detail=<inconsistent API response>" % (
+                    "%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<fail> error=<inconsistent API response>" % (
                     prefixlog, fname, hash, kvalue))
                 return False
         if verdict.tag == 'verdict':
@@ -449,7 +449,7 @@ def wildfireConnect(apihost, apikey):
         )
         log.info('action=<wfapi_init> server=<%s> result=<success>' % apihost)
     except pan.wfapi.PanWFapiError as msg:
-        log.critical('action=<wfapi_init> server=<%s> result=<fail> reason=<%s>' % (apihost, msg))
+        log.critical('action=<wfapi_init> server=<%s> result=<fail> error=<%s>' % (apihost, msg))
         sys.exit(1)
 
     return wfapi
@@ -462,7 +462,7 @@ def redisConnect(redishost, redisport, redisdb, redisauth):
         r.ping()
         log.info('action=<redis_init> server=<%s> port=<%d> db=<%d> result=<success>' % (redishost, redisport, redisdb))
     except (redis.ConnectionError, redis.ResponseError) as e:
-        log.critical('action=<redis_init> server=<%s> port=<%d> db=<%d> result=<fail> reason=<%s>' % (
+        log.critical('action=<redis_init> server=<%s> port=<%d> db=<%d> result=<fail> error=<%s>' % (
             redishost, redisport, redisdb, repr(e)))
         sys.exit(1)
     return r

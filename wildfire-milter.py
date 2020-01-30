@@ -193,18 +193,18 @@ class WildfireMilter(Milter.Base):
         self.port = hostaddr[1]
         self.IPname = IPname  # Name from a reverse IP lookup
         log = logging.getLogger(wildlib.loggerName)
-        log.info('milter_id=<%d> orig_client_ip=<%s> orig_client=<%s> client_ip=<%s> client=<%s> server_ip=<%s> server=<%s>' %
+        log.info('action=<connect> milter_id=<%d> orig_client_ip=<%s> orig_client=<%s> client_ip=<%s> client=<%s> server_ip=<%s> server=<%s>' %
                  (self.id, self.getsymval('{client_addr}'), self.getsymval('{client_name}'), self.IP, IPname,
                   self.getsymval('{daemon_addr}'), self.getsymval('{daemon_name}')))
         if TASK_TYPE != 'single':
             if not bg_redis_write.is_alive():
-                log.critical('milter_id=<%d> error=<The %s to write into Redis is dead.Try to restart...>',
+                log.critical('action=<redis_add> milter_id=<%d> error=<The %s to write into Redis is dead.Try to restart...>',
                              self.id, TASK_TYPE)
                 redisq = Queue(maxsize=QSIZE_REDIS)
                 bg_redis_write = Thread(target=redis_background_write, args=(redisq,))
                 bg_redis_write.start()
             if not bg_submit_wf.is_alive():
-                log.critical('milter_id=<%d> error=<The %s to submit sample for Wildfire is dead. Try to restart...>',
+                log.critical('action=<wildfire_submit> milter_id=<%d> error=<The %s to submit sample for Wildfire is dead. Try to restart...>',
                          self.id, TASK_TYPE)
                 submitq = Queue(maxsize=QSIZE_SUBMIT)
                 bg_submit_wf = Thread(target=submit_wildfire_background, args=(submitq,))
@@ -265,7 +265,7 @@ class WildfireMilter(Milter.Base):
         except Exception:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            log.error("milter_id=<%d> queueid=<%s> error=<Unexpected error - fall back to ACCEPT: %s %s %s>" % (
+            log.error("milter_id=<%d> queueid=<%s> action=<milter.accept> error=<Unexpected error - fall back to ACCEPT: %s %s %s>" % (
                 self.id, self.queueid, exc_type, fname, exc_tb.tb_lineno))
             self.addheader('X-WildMilter-Status', 'Unchecked')
             return Milter.ACCEPT
@@ -307,15 +307,15 @@ class WildfireMilter(Milter.Base):
             for name in WhiteList:
                 if name not in (None, ''):
                     if any(name in s for s in msg_from):
-                        log.info("milter_id=<%d> queue_id=<%s> from=<%s> result=<whitelisted> detail=<accept all attachments>" % (
+                        log.info("milter_id=<%d> queue_id=<%s> action=<whitelist> from=<%s> result=<whitelisted> detail=<accept all attachments>" % (
                             self.id, self.queueid, msg_from))
                         return True
                     if any(name in s for s in msg_to):
-                        log.info("milter_id=<%d> queue_id=<%s> to=<%s> result=<whitelisted> detail=<accept all attachments>" % (
+                        log.info("milter_id=<%d> queue_id=<%s> action=<whitelist> to=<%s> result=<whitelisted> detail=<accept all attachments>" % (
                             self.id, self.queueid, msg_to))
                         return True
                     log.debug(
-                        "milter_id=<%d> queue_id=<%s>, from=<%s> to=<%s> result=<false> detail=<starting analysis of this mail>" % (
+                        "milter_id=<%d> queue_id=<%s> action=<whitelist> from=<%s> to=<%s> result=<false> detail=<starting analysis of this mail>" % (
                             self.id, self.queueid, msg_from, msg_to))
         return False
 
@@ -347,7 +347,7 @@ class WildfireMilter(Milter.Base):
                     # if filename is None
                     #   filename = 'noname'
                     # before 'attachment_fileobj.name = filename' to prevent exception in cleanup.
-                        log.debug('milter_id=<%d> queue_id=<%s> msg_part=<%d> content-type=<%r> filename=<%s> analyze=<False>' % (
+                        log.debug('milter_id=<%d> queue_id=<%s> action=<analyze> msg_part=<%d> content-type=<%r> filename=<%s> analyze=<False>' % (
                             self.id, self.queueid, count, content_type, filename))
                         continue
                     attachment_fileobj = BytesIO(attachment)
@@ -372,7 +372,7 @@ class WildfireMilter(Milter.Base):
                                 break
                         wildlib.cleanup(files_to_inspect, WILDTMPDIR, logadd)
                 else:
-                    log.debug('milter_id=<%d> queue_id=<%s> msg_part=<%d> content-type=<%r> analyze=<False>' % (
+                    log.debug('milter_id=<%d> queue_id=<%s> action=<analyze> msg_part=<%d> content-type=<%r> analyze=<False>' % (
                         self.id, self.queueid, count, content_type))
                 count += 1
             # End of all parts
@@ -404,8 +404,8 @@ class WildfireMilter(Milter.Base):
         if not dict_verdicts:
             # Clean Message
             self.addheader('X-WildMilter-Status', 'Clean')
-            log.info('milter_id=<%d> queue_id=<%s> status=<clean> milter_action=<%s> nexthop=<%s>',
-                     self.id, self.queueid, 'accept', ','.join(self.nexthop))
+            log.info('milter_id=<%d> queue_id=<%s> status=<clean> action=<%s> nexthop=<%s>',
+                     self.id, self.queueid, 'milter.accept', ','.join(self.nexthop))
             return Milter.ACCEPT
 
         # Determine the class (threat or pending)
@@ -434,8 +434,8 @@ class WildfireMilter(Milter.Base):
                     self.setreply('550', '5.7.1', '{}: {}'.format(MESSAGE, th_message))
                 else:
                     self.setreply('550', '5.7.1', MESSAGE)
-                log.warning('milter_id=<%d> queue_id=<%s> status=<threat> milter_action=<%s>' %
-                            (self.id, self.queueid, MILTER_RETURN))
+                log.warning('milter_id=<%d> queue_id=<%s> status=<threat> action=<%s>' %
+                            (self.id, self.queueid, 'milter.' + MILTER_RETURN))
                 if MILTER_RETURN == 'reject':
                     return Milter.REJECT
                 else:
@@ -446,34 +446,34 @@ class WildfireMilter(Milter.Base):
                     self.setreply('454', '4.7.0', '{}: {}'.format(MESSAGE, th_message))
                 else:
                     self.setreply('454', '4.7.0', MESSAGE)
-                log.warning('milter_id=<%d> queue_id=<%s> status=<threat> milter_action=<%s>' %
-                            (self.id, self.queueid, 'defer'))
+                log.warning('milter_id=<%d> queue_id=<%s> status=<threat> action=<%s>' %
+                            (self.id, self.queueid, 'milter.defer'))
                 return Milter.TEMPFAIL
             if MILTER_RETURN == 'accept':
                 for th in th_list:
                     self.addheader('X-WildMilter-Threats', '"%s" type="%s";' % (th['name'], th['type']))
                 self.addheader('X-WildMilter-Status', 'Infected')
-                log.warning('milter_id=<%d> queue_id=<%s> status=<threat> milter_action=<%s> nexthop=<%s>',
-                    self.id, self.queueid, 'accept', ','.join(self.nexthop))
+                log.warning('milter_id=<%d> queue_id=<%s> status=<threat> action=<%s> nexthop=<%s>',
+                    self.id, self.queueid, 'milter.accept', ','.join(self.nexthop))
                 return Milter.ACCEPT
         elif is_pending:
             if (MILTER_RETURN == 'reject' or MILTER_RETURN == 'defer' or MILTER_RETURN == 'discard') and DEFER:
                 self.setreply('454', '4.7.0', pending_message)
-                log.warning('milter_id=<%d> queue_id=<%s> status=<suspicious> milter_action=<%s>' %
-                    (self.id, self.queueid, 'defer'))
+                log.warning('milter_id=<%d> queue_id=<%s> status=<suspicious> action=<%s>' %
+                    (self.id, self.queueid, 'milter.defer'))
                 return Milter.TEMPFAIL
             else:
                 self.addheader('X-WildMilter-Status', 'Suspicious')
                 for sp in susp_list:
                     self.addheader('X-WildMilter-Threats', "name=<%s>" % sp)
-                log.warning('milter_id=<%d> queue_id=<%s> status=<suspicious> milter_action=<%s> nexthop=<%s>',
-                    self.id, self.queueid, 'accept', ','.join(self.nexthop))
+                log.warning('milter_id=<%d> queue_id=<%s> status=<suspicious> action=<%s> nexthop=<%s>',
+                    self.id, self.queueid, 'milter.accept', ','.join(self.nexthop))
                 return Milter.ACCEPT
         else:
             # Clean Message
             self.addheader('X-WildMilter-Status', 'Clean')
-            log.debug('milter_id=<%d> queue_id=<%s> status=<clean> milter_action=<%s> nexthop=<%s>',
-                      self.id, self.queueid, 'accept', ','.join(self.nexthop))
+            log.debug('milter_id=<%d> queue_id=<%s> status=<clean> action=<%s> nexthop=<%s>',
+                      self.id, self.queueid, 'milter.accept', ','.join(self.nexthop))
             return Milter.ACCEPT
 
 

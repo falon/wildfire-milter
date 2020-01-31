@@ -149,18 +149,20 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
                         fo = open(file_with_path, 'rb')
                         archiveWalk(fo, MAXNESTED, count + 1, contentdir + '/' + fpath, listfile, ACCEPTEDMIME, prefixlog)
             except patoolib.util.PatoolError as err:
+                shutil.rmtree(tempdir)
                 log.error('%sfilename=<%s> action=<deflate> error=<%s>',
                           prefixlog, fileobj.name, str(err).replace('>','"').replace('<','"'))
             except Exception:
+                shutil.rmtree(tempdir)
                 trackException('the archive ' + fileobj.name, prefixlog)
         elif count == 0:
             # This file is not an archive or to be analyzed, so it can be removed from fs.
             shutil.rmtree(tempdir)
-        fileobj.close()
         if fileobj.name is not None:
             name_to_log = os.path.basename(tmpfpath)
         else:
             name_to_log = None
+        fileobj.close()
         log.debug('%saction=<free mem> result=<True> name=<%s>', prefixlog, name_to_log)
     return listfile
 

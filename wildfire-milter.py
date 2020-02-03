@@ -328,6 +328,8 @@ class WildfireMilter(Milter.Base):
         global rsub
         global wfp
         all_files_to_inspect = []
+        tmpdir = None
+        tmpdirs = []
         log = logging.getLogger(wildlib.loggerName)
         logadd = ''
         verdicts = []
@@ -360,8 +362,10 @@ class WildfireMilter(Milter.Base):
                     # We check if the attachment has to be analyzed.
                     # Some archives such as 7zip are currently accepted for verdict. Other archives are deflated in a
                     # temp dir and then passed to check_verdict.
-                    files_to_inspect = wildlib.archiveWalk(fileobj=attachment_fileobj, MAXNESTED=MAX_NESTED_ARCHIVE,
+                    files_to_inspect, tmpdir = wildlib.archiveWalk(fileobj=attachment_fileobj, MAXNESTED=MAX_NESTED_ARCHIVE,
                                                            outdirectory=WILDTMPDIR, ACCEPTEDMIME=ACCEPTED_MIME, prefixlog=logadd)
+                    if tmpdir is not None:
+                        tmpdirs.append(tmpdir)
                     if OPTIMIZE_APICALL:
                         all_files_to_inspect = all_files_to_inspect + files_to_inspect
                     else:
@@ -371,7 +375,8 @@ class WildfireMilter(Milter.Base):
                                 verdicts.append({'name': os.path.basename(anyfile.name), 'verdict': verdict})
                             if STOP_AT_POSITIVE and verdict > 0:
                                 break
-                        wildlib.cleanup(files_to_inspect, WILDTMPDIR, logadd)
+                        wildlib.cleanup(files_to_inspect, tmpdirs, logadd)
+                        tmpdirs = []
                 else:
                     log.debug('milter_id=<%d> queue_id=<%s> action=<analyze> msg_part=<%d> content-type=<%r> analyze=<False>' % (
                         self.id, self.queueid, count, content_type))
@@ -381,7 +386,8 @@ class WildfireMilter(Milter.Base):
                 logadd = "milter_id=<%d> queue_id=<%s> " % (self.id, self.queueid)
                 verdicts = wildlib.check_verdicts(r, rsub, REDISTTL, wfp, all_files_to_inspect, WILDTMPDIR,
                     STOP_AT_POSITIVE, Hash_Whitelist, redisq, submitq, logadd)
-                wildlib.cleanup(all_files_to_inspect, WILDTMPDIR, logadd)
+                wildlib.cleanup(all_files_to_inspect, tmpdirs, logadd)
+                tmpdirs = []
 
         except Exception:
             wildlib.trackException(action='the message', prefixlog=('milter_id=<%d> queue_id=<%s> ' % (self.id, self.queueid)))

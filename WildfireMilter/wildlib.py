@@ -4,7 +4,6 @@ import hashlib
 import logging
 import logging.handlers
 import os
-from pathlib import PurePosixPath
 from shlex import quote
 import shutil
 import sys
@@ -94,7 +93,8 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
         If the written fileobj is a known archive is then deflated in a contentdir inside
         the tempdir. The process is recursive for each archive file found.
 
-        Return a list of full temp path file to be analyzed.
+        Return a list of full temp path file to be analyzed and the path which contains
+        all files.
     """
     if listfile is None:
         listfile = []
@@ -102,6 +102,7 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
         listfile = []
     if fileobj is None:
         return listfile
+    rootDir = None
     log = logging.getLogger(loggerName)
     fcontent = fileobj.read()
     magicType = magic.from_buffer(fcontent, mime=True)
@@ -116,6 +117,7 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
             extn = (os.path.splitext(fname)[1]).lower()
             # where to create the archive attachment
             tempdir = tempfile.mkdtemp(prefix=extn, dir=outdirectory)
+            rootDir = tempdir
             # create the archive
             tmp_fs, tmpfpath = tempfile.mkstemp(suffix=extn, dir=tempdir)
             tmpfile = os.fdopen(tmp_fs, "wb")
@@ -149,52 +151,39 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
                         fo = open(file_with_path, 'rb')
                         archiveWalk(fo, MAXNESTED, count + 1, contentdir + '/' + fpath, listfile, ACCEPTEDMIME, prefixlog)
             except patoolib.util.PatoolError as err:
-                shutil.rmtree(tempdir)
                 log.error('%sfilename=<%s> action=<deflate> error=<%s>',
                           prefixlog, fileobj.name, str(err).replace('>','"').replace('<','"'))
             except Exception:
-                shutil.rmtree(tempdir)
                 trackException('the archive ' + fileobj.name, prefixlog)
-        elif count == 0:
-            # This file is not an archive or to be analyzed, so it can be removed from fs.
-            shutil.rmtree(tempdir)
         if fileobj.name is not None:
             name_to_log = os.path.basename(tmpfpath)
         else:
             name_to_log = None
         fileobj.close()
         log.debug('%saction=<free mem> result=<True> name=<%s>', prefixlog, name_to_log)
-    return listfile
+    return listfile, rootDir
 
 
-def cleanup(filelist=None, prefixfile='/tmp', prefixlog=''):
+def cleanup(filelist=None, temp_path=[], prefixlog=''):
     """
-    Clean all tree on one level above common path on filelist,
-    in other words the temp path created by ArchiveWalk
+    Clean the temp path created by ArchiveWalk
     """
     if filelist is None:
         filelist = []
     log = logging.getLogger(loggerName)
-    if len(filelist) == 0:
-        return False
-    already_del_list = []
     for fname in filelist:
-        if fname.name.startswith(prefixfile):
-            # This is a temp file on fs
-            to_clean=prefixfile + '/' + PurePosixPath(fname.name).relative_to(prefixfile).parts[0]
-            try:
-                if to_clean not in already_del_list:
-                    shutil.rmtree(quote(to_clean))
-                    already_del_list.append(to_clean)
-                    log.debug('%saction=<delete> result=<True> path=<%s>' % (prefixlog, to_clean))
-            except:
-                trackException('cleanup tmpdir', prefixlog)
-                return False
         try:
             fname.close()
             log.debug('%saction=<free mem> result=<True> name=<%s>' % (prefixlog, fname.name))
         except:
             trackException('<free mem>', prefixlog)
+    for tempdir in temp_path:
+        try:
+            shutil.rmtree(quote(tempdir))
+            log.debug('%saction=<delete> result=<True> path=<%s>', prefixlog, tempdir)
+        except:
+            trackException('cleanup tmpdir', prefixlog)
+            return False
     return True
 
 

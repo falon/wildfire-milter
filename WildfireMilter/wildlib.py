@@ -4,7 +4,6 @@ import hashlib
 import logging
 import logging.handlers
 import os
-from shlex import quote
 import shutil
 import sys
 import tempfile
@@ -16,6 +15,7 @@ import patoolib
 import redis
 import yaml
 from patoolib import util
+from pathlib import Path
 
 loggerName = 'wildfire'
 
@@ -168,6 +168,7 @@ def cleanup(filelist=None, temp_path=[], prefixlog=''):
     """
     Clean the temp path created by ArchiveWalk
     """
+    clean_status = True
     if filelist is None:
         filelist = []
     log = logging.getLogger(loggerName)
@@ -176,15 +177,16 @@ def cleanup(filelist=None, temp_path=[], prefixlog=''):
             fname.close()
             log.debug('%saction=<free mem> result=<True> name=<%s>' % (prefixlog, fname.name))
         except:
-            trackException('<free mem>', prefixlog)
+            trackException('free mem', prefixlog + 'action=<free mem> ')
+            clean_status = False
     for tempdir in temp_path:
         try:
-            shutil.rmtree(quote(tempdir))
+            shutil.rmtree(Path(tempdir))
             log.debug('%saction=<delete> result=<True> path=<%s>', prefixlog, tempdir)
         except:
-            trackException('cleanup tmpdir', prefixlog)
-            return False
-    return True
+            trackException('delete tmp folder', prefixlog + 'action=<delete> ')
+            clean_status = False
+    return clean_status
 
 
 def to_be_analyzed(fileobj, mtype, accepted_mime, prefixlog=''):

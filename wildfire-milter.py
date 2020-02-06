@@ -171,7 +171,6 @@ class WildfireMilter(Milter.Base):
         self.fp = None
         self.R = []  # list of recipients
         self.nexthop = [] # list of nexthop
-        self.fp = BytesIO()
         self.queueid = None
         self.id = Milter.uniqueID()  # Integer incremented with each call.
 
@@ -190,6 +189,7 @@ class WildfireMilter(Milter.Base):
             self.scope = hostaddr[3]
         else:
             pass
+        self.fp =  None
         self.IP = hostaddr[0]
         self.port = hostaddr[1]
         self.IPname = IPname  # Name from a reverse IP lookup
@@ -217,6 +217,7 @@ class WildfireMilter(Milter.Base):
         self.fromparms = Milter.param2dict(str)  # ESMTP parms
         self.user = self.getsymval('{auth_authen}')  # authenticated user
         self.canon_from = '@'.join(parse_addr(mailfrom))
+        self.fp = BytesIO()
         self.fp.write(b"From %s %s\n" % (codecs.encode(self.canon_from, 'utf-8'), codecs.encode(time.ctime(), 'utf-8')))
         return Milter.CONTINUE
 
@@ -253,8 +254,9 @@ class WildfireMilter(Milter.Base):
         try:
             self.fp.seek(0)
             msg = email.message_from_bytes(self.fp.getvalue())
-            self.fp.close()
-            self.fp = None
+            if self.fp:
+                self.fp.close()
+                self.fp = None
             if self.envelope_is_in_whitelist():
                 self.addheader('X-WildMilter-Status', 'Whitelisted')
                 return Milter.ACCEPT
@@ -356,7 +358,7 @@ class WildfireMilter(Milter.Base):
                     attachment_fileobj = BytesIO(attachment)
                     attachment_fileobj.name = filename
 
-                    logadd = "milter_id=<%d> queue_id=<%s> msg_part=<%d> content-type=<%s> filename=<%s> " % (
+                    logadd = "milter_id=<%d> queue_id=<%s> action=<analyze> msg_part=<%d> content-type=<%s> filename=<%s> " % (
                             self.id, self.queueid, count, content_type, filename)
 
                     # We check if the attachment has to be analyzed.
@@ -377,6 +379,7 @@ class WildfireMilter(Milter.Base):
                                 break
                         wildlib.cleanup(files_to_inspect, tmpdirs, logadd)
                         tmpdirs = []
+                        files_to_inspect = []
                 else:
                     log.debug('milter_id=<%d> queue_id=<%s> action=<analyze> msg_part=<%d> content-type=<%r> analyze=<False>' % (
                         self.id, self.queueid, count, content_type))
@@ -388,9 +391,13 @@ class WildfireMilter(Milter.Base):
                     STOP_AT_POSITIVE, Hash_Whitelist, redisq, submitq, logadd)
                 wildlib.cleanup(all_files_to_inspect, tmpdirs, logadd)
                 tmpdirs = []
+                files_to_inspect = []
 
         except Exception:
-            wildlib.trackException(action='the message', prefixlog=('milter_id=<%d> queue_id=<%s> ' % (self.id, self.queueid)))
+            wildlib.trackException(action='the message', prefixlog=('milter_id=<%d> queue_id=<%s> action=<analyze> ',
+                                                                    self.id, self.queueid))
+            if OPTIMIZE_APICALL:
+                wildlib.cleanup(all_files_to_inspect, tmpdirs, logadd)
 
         return verdicts
 

@@ -221,11 +221,14 @@ def to_be_analyzed(fileobj, mtype, accepted_mime, prefixlog=''):
     return result
 
 
-def submit_verdict_to_wildfire(wildapi, redis, redis_ttl, digest, attachment, spool_path='/run/wildfire', prefixlog=''):
+def submit_verdict_to_wildfire(wildapi, redis_c, redis_ttl, digest, attachment, spool_path='/run/wildfire', prefixlog=''):
     log = logging.getLogger(loggerName)
     thisvalue = None
     # Ask to Redis to find out already submitted attachments
-    thisvalue = redis.get(digest)
+    try:
+        thisvalue = redis_c.get(digest)
+    except (redis.ConnectionError, redis.ResponseError, redis.RedisError) as err:
+        log.critical('%saction=<redis_get> key=<%s> result=<fail> error=<%s>',prefixlog, digest, repr(err))
     size = sys.getsizeof(attachment)
     if thisvalue is not None:
         log.debug('%saction=<wildfire_submit> result=<already> detail=<part already submitted> size=<%d>',
@@ -242,19 +245,19 @@ def submit_verdict_to_wildfire(wildapi, redis, redis_ttl, digest, attachment, sp
                 '%saction=<wildfire_submit> result=<success> size=<%d> detail=<part submitted for further analysis>',
                 prefixlog, size)
             return_as = True
-            add_to_redis(redis, digest, 1, redis_ttl, prefixlog)
+            add_to_redis(redis_c, digest, 1, redis_ttl, prefixlog)
         except pan.wfapi.PanWFapiError as msg:
-            log.error('%saction=<wildfire_submit> result=<fail> size=<%d> error=<%s>', prefixlog, size, msg)
+            log.error('%saction=<wildfire_submit> result=<fail> size=<%d> error=<%s>', prefixlog, size, str(msg).replace('>','"').replace('<','"'))
             return_as = False
     return return_as
 
 
-def add_to_redis(redis, key, value, redis_ttl, prefixlog):
+def add_to_redis(redis_c, key, value, redis_ttl, prefixlog):
     result = False
     log = logging.getLogger(loggerName)
     try:
         ## Add to Redis
-        result = redis.set(key, value, ex=redis_ttl, nx=True, xx=False)
+        result = redis_c.set(key, value, ex=redis_ttl, nx=True, xx=False)
         if result is True:
             log.info("%saction=<redis_add> key=<%s> value=<%s> result=<success>" % (prefixlog, key, value))
         if result is False:
@@ -262,16 +265,17 @@ def add_to_redis(redis, key, value, redis_ttl, prefixlog):
         if result is None:
             log.error("%saction=<redis_add> key=<%s> value=<%s> result=<fail> detail=<already exist>" % (
             prefixlog, key, value))
-    except redis.RedisError as err:
+    except (redis.ConnectionError, redis.ResponseError, redis.RedisError) as err:
         log.error('%saction=<redis_add> key=<%s> value=<%s> error=<%s>' % (prefixlog, key, value, err))
     return result
 
 
-def check_verdicts(redis, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_dir='/run/wildfire', stop=False, wl_hash=[],
+def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_dir='/run/wildfire', stop=False, wl_hash=[],
                    redis_queue=None, wf_queue=None, prefixlog=''):
     log = logging.getLogger(loggerName)
     listvalue = []
     wildattachs = {}
+    thisvalue = None
     ## Hash
     for attachment_obj in attachments_obj:
         attachment_obj.seek(0)
@@ -281,7 +285,12 @@ def check_verdicts(redis, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_di
         if  hash_in_whitelist(wl_hash, thishash, prefixlog):
             continue
         ## Try to read in Redis
-        thisvalue = redis.get(thishash)
+        try:
+            thisvalue = redis_c.get(thishash)
+        except (redis.ConnectionError, redis.ResponseError, redis.RedisError) as err:
+            log.critical('%saction=<redis_get> name=<%s> key=<%s> result=<fail> error=<%s>',
+                         prefixlog, attachment_name, thishash, err)
+            thisvalue = None
         if thisvalue is not None:
             thisvalue = thisvalue.decode('utf-8')
             listvalue.append({'name': attachment_name, 'verdict': int(thisvalue)})
@@ -301,8 +310,8 @@ def check_verdicts(redis, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_di
             result = wildapi.http_code
             reason = wildapi.http_reason
             log.critical(
-                '%saction=<wildfire_multiget> result=<fail> detail=<%s> result_code=<%d> error=<%s>' % (
-                prefixlog, msg, result, reason))
+                '%saction=<wildfire_multiget> result=<fail> detail=<%s> result_code=<%s> error=<%s>' % (
+                prefixlog, str(msg).replace('>','"').replace('<','"'), str(result), reason))
             return False
         if wildapi.xml_element_root is None:
             log.warning("%saction=<wildfire_multiget> result=<fail> error=<empty API response>" % prefixlog)
@@ -342,14 +351,14 @@ def check_verdicts(redis, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_di
                             args = (thishash, thisvalue, redis_ttl, prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
                             redis_queue.put(args)
                         else:
-                            add_to_redis(redis, thishash, thisvalue, redis_ttl, prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
+                            add_to_redis(redis_c, thishash, thisvalue, redis_ttl, prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
                     listvalue.append({'name': wildattachs[thishash]['name'], 'verdict': thisvalue})
                     if stop and thisvalue > 0:
                         return listvalue
     return listvalue
 
 
-def check_verdict(redis, redis_sub, redis_ttl, wildapi, attachment_obj, tmp_dir='/run/wildfire', wl_hash=[],
+def check_verdict(redis_c, redis_sub, redis_ttl, wildapi, attachment_obj, tmp_dir='/run/wildfire', wl_hash=[],
                   redis_queue=None, wf_queue=None, prefixlog=''):
     log = logging.getLogger(loggerName)
     attachment_obj.seek(0)
@@ -360,7 +369,11 @@ def check_verdict(redis, redis_sub, redis_ttl, wildapi, attachment_obj, tmp_dir=
     if  hash_in_whitelist(wl_hash, hash, prefixlog):
             return False
     ## Try to read in Redis
-    kvalue = redis.get(hash)
+    try:
+        kvalue = redis_c.get(hash)
+    except (redis.ConnectionError, redis.ResponseError, redis.RedisError) as err:
+        log.critical('%saction=<redis_get> name=<%s> key=<%s> value=<%s> result=<fail> error=<%s>',
+                     prefixlog, fname, hash, kvalue, repr(err))
     if kvalue is not None:
         kvalue = kvalue.decode('utf-8')
     log.info("%saction=<redis_get> name=<%s> key=<%s> value=<%s>" % (prefixlog, fname, hash, kvalue))
@@ -373,8 +386,8 @@ def check_verdict(redis, redis_sub, redis_ttl, wildapi, attachment_obj, tmp_dir=
         result = wildapi.http_code
         reason = wildapi.http_reason
         log.critical(
-            '%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<fail> detail=<%s> result_code=<%d> error=<%s>' % (
-            prefixlog, fname, hash, kvalue, msg, result, reason))
+            '%saction=<wildfire_get> name=<%s> key=<%s> value=<%s> result=<fail> detail=<%s> result_code=<%s> error=<%s>' % (
+            prefixlog, fname, hash, kvalue, str(msg).replace('>','"').replace('<','"'), str(result), reason))
         return False
 
     if wildapi.xml_element_root is None:
@@ -416,7 +429,7 @@ def check_verdict(redis, redis_sub, redis_ttl, wildapi, attachment_obj, tmp_dir=
                         args = (hash, kvalue, redis_ttl, prefixlog + 'name=<%s> ' % fname)
                         redis_queue.put(args)
                     else:
-                        add_to_redis(redis, hash, kvalue, redis_ttl, prefixlog + 'name=<%s> ' % fname)
+                        add_to_redis(redis_c, hash, kvalue, redis_ttl, prefixlog + 'name=<%s> ' % fname)
     return kvalue
 
 
@@ -460,8 +473,8 @@ def redisConnect(redishost, redisport, redisdb, redisauth):
         r.ping()
         log.info('action=<redis_init> server=<%s> port=<%d> db=<%d> result=<success>' % (redishost, redisport, redisdb))
     except (redis.ConnectionError, redis.ResponseError) as e:
-        log.critical('action=<redis_init> server=<%s> port=<%d> db=<%d> result=<fail> error=<%s>' % (
-            redishost, redisport, redisdb, repr(e)))
+        log.critical('action=<redis_init> server=<%s> port=<%d> db=<%d> result=<fail> error=<%s>',
+            redishost, redisport, redisdb, repr(e))
         sys.exit(1)
     return r
 

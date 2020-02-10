@@ -155,6 +155,8 @@ if not wildlib.set_log(LOGHANDLER, SYSLOG_SOCKET, SYSLOG_FAC, SYSLOG_LEVEL, LOGS
     sys.exit(1)
 log = logging.getLogger(wildlib.loggerName)
 
+import tracemalloc
+tracemalloc.start()
 
 class WildfireMilter(Milter.Base):
 
@@ -225,7 +227,7 @@ class WildfireMilter(Milter.Base):
     def envrcpt(self, to, *str):
         toparms = Milter.param2dict(str)
         self.R.append(to)
-        if self.getsymval('{rcpt_host}') not in self.nexthop:
+        if self.getsymval('{rcpt_host}') not in self.nexthop and self.getsymval('{rcpt_host}') is not None:
             self.nexthop.append(self.getsymval('{rcpt_host}'))
         return Milter.CONTINUE
 
@@ -250,6 +252,8 @@ class WildfireMilter(Milter.Base):
         all_verdicts = []
         if not self.fp:
             return Milter.ACCEPT  # no message collected - so no eom processing
+        if not self.nexthop:
+            self.nexthop = ['unavailable']
         log = logging.getLogger(wildlib.loggerName)
         try:
             self.fp.seek(0)
@@ -263,6 +267,13 @@ class WildfireMilter(Milter.Base):
             else:
                 all_verdicts = self.checkforthreat(msg)
                 msg = None
+                try:
+                    snapshot = tracemalloc.take_snapshot()
+                    for i, stat in enumerate(snapshot.statistics('filename')[:5], 1):
+                        print("top_current %d %s" % (i, str(stat)))
+                except:
+                    wildlib.trackException('malloc', '')
+
                 return self.milter_result(all_verdicts)
 
         except Exception:
@@ -335,6 +346,12 @@ class WildfireMilter(Milter.Base):
         log = logging.getLogger(wildlib.loggerName)
         logadd = ''
         verdicts = []
+        ## Memory DEBUG ##
+        #from pympler import muppy, summary
+        #all_objects = muppy.get_objects()
+        #sum1 = summary.summarize(all_objects)  # Prints out a summary of the large objects
+        #summary.print_(sum1)
+        #####################################
         try:
             count = 1
             for part in msg.walk():
@@ -358,7 +375,7 @@ class WildfireMilter(Milter.Base):
                     attachment_fileobj = BytesIO(attachment)
                     attachment_fileobj.name = filename
 
-                    logadd = "milter_id=<%d> queue_id=<%s> action=<analyze> msg_part=<%d> content-type=<%s> filename=<%s> " % (
+                    logadd = "milter_id=<%d> queue_id=<%s> msg_part=<%d> content-type=<%s> filename=<%s> " % (
                             self.id, self.queueid, count, content_type, filename)
 
                     # We check if the attachment has to be analyzed.
@@ -418,8 +435,11 @@ class WildfireMilter(Milter.Base):
         if not dict_verdicts:
             # Clean Message
             self.addheader('X-WildMilter-Status', 'Clean')
-            log.info('milter_id=<%d> queue_id=<%s> status=<clean> action=<%s> nexthop=<%s>',
+            try:
+                log.info('milter_id=<%d> queue_id=<%s> status=<clean> action=<%s> nexthop=<%s>',
                      self.id, self.queueid, 'milter.accept', ','.join(self.nexthop))
+            except:
+                wildlib.trackException('log','')
             return Milter.ACCEPT
 
         # Determine the class (threat or pending)

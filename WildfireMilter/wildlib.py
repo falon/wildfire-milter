@@ -11,11 +11,10 @@ import traceback
 
 import magic
 import pan.wfapi
-import patoolib
 import redis
 import yaml
-from patoolib import util
 from pathlib import Path
+from patoolib import util
 
 loggerName = 'wildfire'
 
@@ -103,10 +102,15 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
     if fileobj is None:
         return listfile
     rootDir = None
+    contentdir = None
     log = logging.getLogger(loggerName)
     fcontent = fileobj.read()
+    if fileobj.name is not None:
+        name_to_log = os.path.basename(fileobj.name)
+    else:
+        name_to_log = 'noname'
     magicType = magic.from_buffer(fcontent, mime=True)
-    if to_be_analyzed(fileobj, magicType, ACCEPTEDMIME, prefixlog):
+    if to_be_analyzed(fcontent, magicType, ACCEPTEDMIME, prefixlog + 'name=<%s> ' % name_to_log):
         listfile.append(fileobj)
     else:
         # create a random secure temp file
@@ -124,9 +128,7 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
             tmpfile.write(fcontent)
             # Close the file to avoid the open file exception
             tmpfile.close()
-            fileobj.close()
             fcontent = None
-            log.debug('%saction=<free mem> result=<True> name=<%s>',prefixlog,fname)
         else:
             tmpfpath = fileobj.name
         if is_archive(tmpfpath):
@@ -141,7 +143,13 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
                         "%s action=<deflate> error=<Too many nested zips found - possible zipbomb!>" % prefixlog)
                 # Otherwise proceed to deflate
                 contentdir = tempfile.mkdtemp(prefix='content_', dir=tempdir)
-                patoolib.extract_archive(tmpfpath, outdir=contentdir, verbosity=-1, interactive=False)
+                import patoolib
+                try:
+                    patoolib.extract_archive(tmpfpath, outdir=contentdir, verbosity=-1, interactive=False)
+                except patoolib.util.PatoolError as err:
+                    log.error('%sfilename=<%s> action=<deflate> error=<%s>',
+                              prefixlog, fileobj.name, str(err).replace('>','"').replace('<','"'))
+                del patoolib
                 # List all file in archive
                 ## r=root, d=directories, f = files
                 for r, d, f in os.walk(contentdir):
@@ -150,15 +158,8 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
                         fpath, fname = os.path.split(file_with_path)
                         fo = open(file_with_path, 'rb')
                         archiveWalk(fo, MAXNESTED, count + 1, contentdir + '/' + fpath, listfile, ACCEPTEDMIME, prefixlog)
-            except patoolib.util.PatoolError as err:
-                log.error('%sfilename=<%s> action=<deflate> error=<%s>',
-                          prefixlog, fileobj.name, str(err).replace('>','"').replace('<','"'))
             except Exception:
                 trackException('the archive ' + fileobj.name, prefixlog)
-        if fileobj.name is not None:
-            name_to_log = os.path.basename(tmpfpath)
-        else:
-            name_to_log = None
         fileobj.close()
         log.debug('%saction=<free mem> result=<True> name=<%s>', prefixlog, name_to_log)
     return listfile, rootDir
@@ -173,9 +174,13 @@ def cleanup(filelist=None, temp_path=[], prefixlog=''):
         filelist = []
     log = logging.getLogger(loggerName)
     for fname in filelist:
+        if fname.name is not None:
+            name_to_log = os.path.basename(fname.name)
+        else:
+            name_to_log = 'noname'
         try:
             fname.close()
-            log.debug('%saction=<free mem> result=<True> name=<%s>' % (prefixlog, fname.name))
+            log.debug('%saction=<free mem> result=<True> name=<%s>' % (prefixlog, name_to_log))
         except:
             trackException('free mem', prefixlog + 'action=<free mem> ')
             clean_status = False
@@ -189,7 +194,7 @@ def cleanup(filelist=None, temp_path=[], prefixlog=''):
     return clean_status
 
 
-def to_be_analyzed(fileobj, mtype, accepted_mime, prefixlog=''):
+def to_be_analyzed(data, mtype, accepted_mime, prefixlog=''):
     """
     return True if mtype is in accepted_mime types and of suitable size
     accepted_mime is a list of dictionary, such as:
@@ -201,7 +206,6 @@ def to_be_analyzed(fileobj, mtype, accepted_mime, prefixlog=''):
     """
     result = False
     log = logging.getLogger(loggerName)
-    data = fileobj.read()
 
     size = sys.getsizeof(data)
     for this in accepted_mime:
@@ -209,15 +213,11 @@ def to_be_analyzed(fileobj, mtype, accepted_mime, prefixlog=''):
             if size < this['size'] * 1048576:
                 result = True
                 break
-    if fileobj.name is not None:
-        name_to_log = os.path.basename(fileobj.name)
-    else:
-        name_to_log = None
-    eventlog = '%s action=<analyze> name=<%s> detected_type=<%s> size=<%d> analyze=<%r>'
+    eventlog = '%sdetected_type=<%s> size=<%d> action=<analyze> analyze=<%r>'
     if result:
-        log.info(eventlog, prefixlog, name_to_log, mtype, size, result)
+        log.info(eventlog, prefixlog, mtype, size, result)
     else:
-        log.debug(eventlog, prefixlog, name_to_log, mtype, size, result)
+        log.debug(eventlog, prefixlog, mtype, size, result)
     return result
 
 
@@ -280,6 +280,7 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
     for attachment_obj in attachments_obj:
         attachment_obj.seek(0)
         attachment = attachment_obj.read()
+        #attachment_obj.close()
         attachment_name = os.path.basename(attachment_obj.name)
         thishash = hashlib.sha256(attachment).hexdigest()
         if  hash_in_whitelist(wl_hash, thishash, prefixlog):
@@ -338,12 +339,11 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
                     prefixlog, wildattachs[thishash]['name'], thishash, thisvalue))
                     if thisvalue == -102:
                         ### Submit to wildfire
-                        attach = wildattachs[thishash]['content']
                         if  'threading' in  sys.modules and wf_queue is not None:
-                            args = (redis_ttl, thishash, attach, tmp_dir, prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
+                            args = (redis_ttl, thishash, wildattachs[thishash]['content'], tmp_dir, prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
                             wf_queue.put(args)
                         else:
-                            submit_verdict_to_wildfire(wildapi, redis_sub, redis_ttl, thishash, attach, spool_path=tmp_dir,
+                            submit_verdict_to_wildfire(wildapi, redis_sub, redis_ttl, thishash, wildattachs[thishash]['content'], spool_path=tmp_dir,
                                      prefixlog=prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
                     elif thisvalue >= 0:
                         # If multiprocessing, the threading is loaded too
@@ -363,6 +363,7 @@ def check_verdict(redis_c, redis_sub, redis_ttl, wildapi, attachment_obj, tmp_di
     log = logging.getLogger(loggerName)
     attachment_obj.seek(0)
     attachment = attachment_obj.read()
+    #attachment_obj.close()
     fname = os.path.basename(attachment_obj.name)
     ## Hash
     hash = hashlib.sha256(attachment).hexdigest()

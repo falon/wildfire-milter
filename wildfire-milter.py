@@ -155,8 +155,6 @@ if not wildlib.set_log(LOGHANDLER, SYSLOG_SOCKET, SYSLOG_FAC, SYSLOG_LEVEL, LOGS
     sys.exit(1)
 log = logging.getLogger(wildlib.loggerName)
 
-import tracemalloc
-tracemalloc.start()
 
 class WildfireMilter(Milter.Base):
 
@@ -267,13 +265,6 @@ class WildfireMilter(Milter.Base):
             else:
                 all_verdicts = self.checkforthreat(msg)
                 msg = None
-                try:
-                    snapshot = tracemalloc.take_snapshot()
-                    for i, stat in enumerate(snapshot.statistics('filename')[:5], 1):
-                        print("top_current %d %s" % (i, str(stat)))
-                except:
-                    wildlib.trackException('malloc', '')
-
                 return self.milter_result(all_verdicts)
 
         except Exception:
@@ -346,12 +337,6 @@ class WildfireMilter(Milter.Base):
         log = logging.getLogger(wildlib.loggerName)
         logadd = ''
         verdicts = []
-        ## Memory DEBUG ##
-        #from pympler import muppy, summary
-        #all_objects = muppy.get_objects()
-        #sum1 = summary.summarize(all_objects)  # Prints out a summary of the large objects
-        #summary.print_(sum1)
-        #####################################
         try:
             count = 1
             for part in msg.walk():

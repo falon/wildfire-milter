@@ -331,7 +331,6 @@ class WildfireMilter(Milter.Base):
         global r
         global rsub
         global wfp
-        import os
         all_files_to_inspect = []
         tmpdir = None
         tmpdirs = []
@@ -401,7 +400,6 @@ class WildfireMilter(Milter.Base):
                                                                     self.id, self.queueid))
             if OPTIMIZE_APICALL:
                 wildlib.cleanup(all_files_to_inspect, tmpdirs, logadd)
-        del os
         return verdicts
 
     def milter_result(self, dict_verdicts):

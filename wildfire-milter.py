@@ -589,8 +589,11 @@ def main():
         bg_submit_wf   = Thread(target=submit_wildfire_background, args=(submitq,))
         bg_redis_write.start()
         bg_submit_wf.start()
-    # start the milter
+
+    # start the milter #################################
     Milter.runmilter('WildfireMilter', SOCKET, TIMEOUT)
+    ####################################################
+
     if TASK_TYPE != 'single':
         # Terminate the running threads.
         redisq.put(None)

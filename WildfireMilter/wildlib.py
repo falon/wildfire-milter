@@ -279,10 +279,9 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
     ## Hash
     for attachment_obj in attachments_obj:
         attachment_obj.seek(0)
-        attachment = attachment_obj.read()
-        #attachment_obj.close()
+        #attachment = attachment_obj.read()
         attachment_name = os.path.basename(attachment_obj.name)
-        thishash = hashlib.sha256(attachment).hexdigest()
+        thishash = hashlib.sha256(attachment_obj.read()).hexdigest()
         if  hash_in_whitelist(wl_hash, thishash, prefixlog):
             continue
         ## Try to read in Redis
@@ -299,7 +298,9 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
                 return listvalue
         else:
             # We have to ask to Wildfire
-            wildattachs[thishash] = {'content': attachment, 'name': attachment_name}
+            attachment_obj.seek(0)
+            wildattachs[thishash] = {'content': attachment_obj.read(), 'name': attachment_name}
+        attachment_obj.close()
         log.info("%saction=<redis_get> name=<%s> key=<%s> value=<%s>" % (
             prefixlog, attachment_name, thishash, thisvalue))
     ## If not in Redis, read from Wildfire
@@ -342,6 +343,7 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
                         if  'threading' in  sys.modules and wf_queue is not None:
                             args = (redis_ttl, thishash, wildattachs[thishash]['content'], tmp_dir, prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
                             wf_queue.put(args)
+                            del args
                         else:
                             submit_verdict_to_wildfire(wildapi, redis_sub, redis_ttl, thishash, wildattachs[thishash]['content'], spool_path=tmp_dir,
                                      prefixlog=prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
@@ -350,6 +352,7 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
                         if  'threading' in  sys.modules and redis_queue is not None:
                             args = (thishash, thisvalue, redis_ttl, prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
                             redis_queue.put(args)
+                            del args
                         else:
                             add_to_redis(redis_c, thishash, thisvalue, redis_ttl, prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
                     listvalue.append({'name': wildattachs[thishash]['name'], 'verdict': thisvalue})

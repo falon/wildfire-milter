@@ -28,6 +28,7 @@
 ############################################################################
 import codecs
 import email
+from email.message import EmailMessage
 import logging
 import logging.handlers
 import os
@@ -217,6 +218,7 @@ class WildfireMilter(Milter.Base):
         self.fromparms = Milter.param2dict(str)  # ESMTP parms
         self.user = self.getsymval('{auth_authen}')  # authenticated user
         self.canon_from = '@'.join(parse_addr(mailfrom))
+        self.R = []
         self.fp = BytesIO()
         self.fp.write(b"From %s %s\n" % (codecs.encode(self.canon_from, 'utf-8'), codecs.encode(time.ctime(), 'utf-8')))
         return Milter.CONTINUE
@@ -248,6 +250,7 @@ class WildfireMilter(Milter.Base):
 
     def eom(self):
         all_verdicts = []
+        msg = None
         if not self.fp:
             return Milter.ACCEPT  # no message collected - so no eom processing
         if not self.nexthop:
@@ -255,7 +258,7 @@ class WildfireMilter(Milter.Base):
         log = logging.getLogger(wildlib.loggerName)
         try:
             self.fp.seek(0)
-            msg = email.message_from_bytes(self.fp.getvalue())
+            msg = email.message_from_bytes(self.fp.getvalue(), _class=EmailMessage)
             if self.fp:
                 self.fp.close()
                 self.fp = None
@@ -264,14 +267,12 @@ class WildfireMilter(Milter.Base):
                 return Milter.ACCEPT
             else:
                 all_verdicts = self.checkforthreat(msg)
-                msg = None
                 return self.milter_result(all_verdicts)
 
         except Exception:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            log.error("milter_id=<%d> queueid=<%s> action=<milter.accept> error=<Unexpected error - fall back to ACCEPT: %s %s %s>" % (
-                self.id, self.queueid, exc_type, fname, exc_tb.tb_lineno))
+            wildlib.trackException(action='the message',
+                                   prefixlog='milter_id=<%d> queue_id=<%s> action=<milter.accept> ' %
+                                             (self.id, self.queueid))
             self.addheader('X-WildMilter-Status', 'Unchecked')
             return Milter.ACCEPT
 
@@ -343,7 +344,7 @@ class WildfireMilter(Milter.Base):
                 # for name, value in part.items():
                 #     log.debug(' - %s: %r' % (name, value))
                 content_type = part.get_content_type()
-                if not content_type.startswith('multipart'):
+                if not part.get_content_maintype() == 'multipart':
                     filename = part.get_filename(None)
                     attachment = part.get_payload(decode=True)
 
@@ -359,7 +360,6 @@ class WildfireMilter(Milter.Base):
                         continue
                     attachment_fileobj = BytesIO(attachment)
                     attachment_fileobj.name = filename
-
                     logadd = "milter_id=<%d> queue_id=<%s> msg_part=<%d> content-type=<%s> filename=<%s> " % (
                             self.id, self.queueid, count, content_type, filename)
 
@@ -396,8 +396,8 @@ class WildfireMilter(Milter.Base):
                 files_to_inspect = []
 
         except Exception:
-            wildlib.trackException(action='the message', prefixlog=('milter_id=<%d> queue_id=<%s> action=<analyze> ',
-                                                                    self.id, self.queueid))
+            wildlib.trackException(action='the message', prefixlog='milter_id=<%d> queue_id=<%s> action=<analyze> ' %
+                                                                    (self.id, self.queueid))
             if OPTIMIZE_APICALL:
                 wildlib.cleanup(all_files_to_inspect, tmpdirs, logadd)
         return verdicts

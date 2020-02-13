@@ -49,11 +49,11 @@ def set_log(handler_type, socket, facility, level='INFO', stdout=False, filepath
 
 def trackException(action, prefixlog=''):
     log = logging.getLogger(loggerName)
-    log.error('%serror=<Error while processing %s>' % (prefixlog, action))
     exc_type, exc_value, exc_traceback = sys.exc_info()
     lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
     exep = ''.join(line for line in lines)
-    log.exception("%sException code: <%s>" % (prefixlog, exep.replace('\n', ' - ')))
+    log.exception("%serror=<Error while processing %s> exception=<%s>",
+                  prefixlog, action, exep.replace('\n', ' - ').replace('<',"'").replace('>',"'"))
 
 
 def hash_in_whitelist(Hash_Whitelist, wildhash, prefixlog=''):
@@ -128,6 +128,7 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
             tmpfile.write(fcontent)
             # Close the file to avoid the open file exception
             tmpfile.close()
+            tmpfile = None
             fcontent = None
         else:
             tmpfpath = fileobj.name
@@ -161,6 +162,7 @@ def archiveWalk(fileobj=None, MAXNESTED=0, count=0, outdirectory='/tmp', listfil
             except Exception:
                 trackException('the archive ' + fileobj.name, prefixlog)
         fileobj.close()
+        fileobj = None
         log.debug('%saction=<free mem> result=<True> name=<%s>', prefixlog, name_to_log)
     return listfile, rootDir
 
@@ -279,9 +281,10 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
     ## Hash
     for attachment_obj in attachments_obj:
         attachment_obj.seek(0)
-        #attachment = attachment_obj.read()
+        attachment = attachment_obj.read()
         attachment_name = os.path.basename(attachment_obj.name)
-        thishash = hashlib.sha256(attachment_obj.read()).hexdigest()
+        attachment_obj.close()
+        thishash = hashlib.sha256(attachment).hexdigest()
         if  hash_in_whitelist(wl_hash, thishash, prefixlog):
             continue
         ## Try to read in Redis
@@ -298,9 +301,8 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
                 return listvalue
         else:
             # We have to ask to Wildfire
-            attachment_obj.seek(0)
-            wildattachs[thishash] = {'content': attachment_obj.read(), 'name': attachment_name}
-        attachment_obj.close()
+            wildattachs[thishash] = {'content': attachment, 'name': attachment_name}
+        attachment = None
         log.info("%saction=<redis_get> name=<%s> key=<%s> value=<%s>" % (
             prefixlog, attachment_name, thishash, thisvalue))
     ## If not in Redis, read from Wildfire
@@ -357,7 +359,10 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
                             add_to_redis(redis_c, thishash, thisvalue, redis_ttl, prefixlog + 'name=<%s> ' % wildattachs[thishash]['name'])
                     listvalue.append({'name': wildattachs[thishash]['name'], 'verdict': thisvalue})
                     if stop and thisvalue > 0:
+                        wildattachs.clear()
                         return listvalue
+        elem.clear()
+    wildattachs.clear()
     return listvalue
 
 

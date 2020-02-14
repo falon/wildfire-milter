@@ -38,6 +38,7 @@ import time
 from io import BytesIO
 from pathlib import Path
 from socket import AF_INET6
+import systemd.daemon
 
 import Milter
 from Milter.utils import parse_addr
@@ -504,6 +505,7 @@ def redis_background_write(q):
     while True:
         args = q.get()
         if args is None:
+            log.info('Quitting subprocess for Redis write')
             break
         # Perform the action
         key, value, redis_ttl, prefixlog = args
@@ -519,6 +521,7 @@ def submit_wildfire_background(q):
     while True:
         args = q.get()
         if args is None:
+            log.info('Quitting subprocess for WildFire submit')
             break
         # Perform the action
         redis_ttl, key, attach, tmp_dir, prefixl = args
@@ -590,6 +593,10 @@ def main():
         bg_redis_write.start()
         bg_submit_wf.start()
 
+    # Notify systemd that the milter is ready to serve and to protect
+    if systemd.daemon.booted():
+        systemd.daemon.notify('READY=1')
+        systemd.daemon.notify('STATUS=Initialization of WildFire API and Redis completed. Ready to work.')
     # start the milter #################################
     Milter.runmilter('WildfireMilter', SOCKET, TIMEOUT)
     ####################################################
@@ -600,6 +607,10 @@ def main():
         submitq.put(None)
         bg_redis_write.join()
         bg_submit_wf.join()
+
+    if systemd.daemon.booted():
+        systemd.daemon.notify('STOPPING=1')
+        systemd.daemon.notify('STATUS=Wildfire Milter ready to stop.')
 
     log.info('Wildfire Milter shutdown')
     print("\n*********** %s shutdown ***********\n" % 'WildfireMilter')

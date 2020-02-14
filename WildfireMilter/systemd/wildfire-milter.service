@@ -5,10 +5,13 @@ After=var-run.mount nss-lookup.target network.target remote-fs.target time-sync.
 Before=mail-transfer-agent.target
 
 [Service]
+Type=notify
 User=wildmilt
 Group=wildmilt
 MemoryAccounting=true
 MemoryLimit=3G
+KillMode=mixed
+TimeoutStopSec=10s
 ExecStart=/usr/bin/python3 /usr/bin/wildfire-milter.py
 Restart=always
 

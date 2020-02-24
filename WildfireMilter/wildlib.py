@@ -298,6 +298,10 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
             thisvalue = thisvalue.decode('utf-8')
             listvalue.append({'name': attachment_name, 'verdict': int(thisvalue)})
             if stop and int(thisvalue) > 0:
+                attachment = None
+                wildattachs.clear()
+                log.info("%saction=<redis_get> name=<%s> key=<%s> value=<%s>" % (
+                    prefixlog, attachment_name, thishash, thisvalue))
                 return listvalue
         else:
             # We have to ask to Wildfire
@@ -316,9 +320,11 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
             log.critical(
                 '%saction=<wildfire_multiget> result=<fail> detail=<%s> result_code=<%s> error=<%s>' % (
                 prefixlog, str(msg).replace('>','"').replace('<','"'), str(result), reason))
+            wildattachs.clear()
             return False
         if wildapi.xml_element_root is None:
             log.warning("%saction=<wildfire_multiget> result=<fail> error=<empty API response>" % prefixlog)
+            wildattachs.clear()
             return False
         elem = wildapi.xml_element_root
         nelem = len(wildapi.xml_element_root.getchildren())
@@ -335,6 +341,7 @@ def check_verdicts(redis_c, redis_sub, redis_ttl, wildapi, attachments_obj, tmp_
                         log.error(
                             "%saction=<wildfire_multiget> key=<%s> result=<fail> error=<inconsistent API response>" % (
                             prefixlog, thishash))
+                        wildattachs.clear()
                         return False
                 if verdict.tag == 'verdict':
                     thisvalue = int(verdict.text)

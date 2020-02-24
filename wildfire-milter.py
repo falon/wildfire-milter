@@ -22,7 +22,6 @@
 #
 # TODO: handle exception if milter SOCKET can't open.
 # TODO: manage config reload without milter restart.
-# TODO: add systemd notify
 # TODO: add check of url in text parts.
 #
 ############################################################################
@@ -39,6 +38,7 @@ from io import BytesIO
 from pathlib import Path
 from socket import AF_INET6
 import systemd.daemon
+from resource import *
 
 import Milter
 from Milter.utils import parse_addr
@@ -268,7 +268,9 @@ class WildfireMilter(Milter.Base):
                 return Milter.ACCEPT
             else:
                 all_verdicts = self.checkforthreat(msg)
-                return self.milter_result(all_verdicts)
+                milt_ret = self.milter_result(all_verdicts)
+                all_verdicts.clear()
+                return milt_ret
 
         except Exception:
             wildlib.trackException(action='the message',
@@ -285,6 +287,25 @@ class WildfireMilter(Milter.Base):
         if self.fp:
             self.fp.close()
             self.fp = None
+        # Suicide if RSS memory usage exceeds 3 GiB
+        if systemd.daemon.booted():
+            rss = getrusage(RUSAGE_SELF)[2]
+            if rss > 3145728:
+                # We are exceeding 3GB of mem
+                systemd.daemon.notify('STOPPING=1')
+                systemd.daemon.notify('STATUS=Wildfire Milter wants to stop because exceeding memory usage of 2.95 GiB.')
+                log.critical("milter_id=<%d> last_queueid=<%s> action=<kill> rss=<%d> detail=<suicide for exceeding memory usage of %d KB>",
+                             self.id, self.queueid, rss, 3145728)
+                global bg_redis_write, bg_submit_wf
+                global TASK_TYPE
+                if TASK_TYPE != 'single':
+                    # Terminate the running threads.
+                    redisq.put(None)
+                    submitq.put(None)
+                    bg_redis_write.join()
+                    bg_submit_wf.join()
+                sys.exit(1)
+            rss = None
         return Milter.CONTINUE
 
     def abort(self):
@@ -340,10 +361,9 @@ class WildfireMilter(Milter.Base):
         logadd = ''
         verdicts = []
         try:
-            count = 1
+            count = 0
             for part in msg.walk():
-                # for name, value in part.items():
-                #     log.debug(' - %s: %r' % (name, value))
+                count +=1
                 content_type = part.get_content_type()
                 if not part.get_content_maintype() == 'multipart':
                     filename = part.get_filename(None)
@@ -386,7 +406,6 @@ class WildfireMilter(Milter.Base):
                 else:
                     log.debug('milter_id=<%d> queue_id=<%s> action=<analyze> msg_part=<%d> content-type=<%r> analyze=<False>' % (
                         self.id, self.queueid, count, content_type))
-                count += 1
             # End of all parts
             if OPTIMIZE_APICALL:
                 logadd = "milter_id=<%d> queue_id=<%s> " % (self.id, self.queueid)

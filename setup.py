@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='wildfire-milter',
-    version='0.1.post34',
+    version='0.1.post35',
     description='A milter which interfaces to Wildfire Palo Alto API',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -33,6 +33,7 @@ setup(
         'python-magic>=0.4.15, <1.0',
         'PyYAML>=5.2',
         'redis>=3.3',
+        'systemd-python>234',
     ],
     python_requires='>=3.6',
     url='https://github.com/falon/wildfire-milter',

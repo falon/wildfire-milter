@@ -24,6 +24,8 @@ Milter:
   DEFER_IF_SUSPECT: true
   # Max nested archive depth - recommendation = 5
   MAX_NESTED: 5
+  # Max Memory usage (RSS) in GiB. If exceeded Milter dies.
+  MAX_RSS: 3
 
 Logging:
   # Must be "syslog" or "file"

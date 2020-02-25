@@ -74,6 +74,7 @@ if os.path.isfile(CONFIG):
     MAX_NESTED_ARCHIVE = milter_parameters['MAX_NESTED']
     MILTER_RETURN = milter_parameters['ON_VIRUS']
     REJECT_DETAIL = milter_parameters['REJECT_DETAIL']
+    MEM_MAX = milter_parameters['MAX_RSS']*1048576
 
     logging_parameters =  wildlib.load_yaml(CONFIG, "Logging")
     LOGFILE_DIR = logging_parameters['LOGFILE_DIR']
@@ -112,7 +113,7 @@ else:
 
 # check if all config parameters are present
 for confvar in (
-        SOCKET, UMASK, TIMEOUT, DEFER, MESSAGE, MAX_NESTED_ARCHIVE, MILTER_RETURN, REJECT_DETAIL,
+        SOCKET, UMASK, TIMEOUT, DEFER, MESSAGE, MAX_NESTED_ARCHIVE, MILTER_RETURN, REJECT_DETAIL, MEM_MAX,
         LOGFILE_DIR, LOGFILE_NAME, LOGSTDOUT,
         LOGHANDLER, SYSLOG_FAC, SYSLOG_LEVEL, SYSLOG_SOCKET, REDISHOST, REDISPORT, REDISAUTH, REDISDB, DBSUB, REDISTTL,
         WILDHOST, WILDKEY, OPTIMIZE_APICALL, WILDTMPDIR, TASK_TYPE, QSIZE_SUBMIT, QSIZE_REDIS, ACCEPTED_MIME):
@@ -289,13 +290,14 @@ class WildfireMilter(Milter.Base):
             self.fp = None
         # Suicide if RSS memory usage exceeds 3 GiB
         if systemd.daemon.booted():
+            # getrusage returns mem in KB
             rss = getrusage(RUSAGE_SELF)[2]
-            if rss > 3145728:
-                # We are exceeding 3GB of mem
+            if rss > MEM_MAX:
+                # We are exceeding mem limit
                 systemd.daemon.notify('STOPPING=1')
-                systemd.daemon.notify('STATUS=Wildfire Milter wants to stop because exceeding memory usage of 2.95 GiB.')
-                log.critical("milter_id=<%d> last_queueid=<%s> action=<kill> rss=<%d> detail=<suicide for exceeding memory usage of %d KB>",
-                             self.id, self.queueid, rss, 3145728)
+                systemd.daemon.notify('STATUS=Wildfire Milter wants to stop because exceeding memory usage of %.1f GiB.' % (MEM_MAX/1048576))
+                log.critical("milter_id=<%d> last_queueid=<%s> action=<kill> rss=<%.1f> detail=<suicide for exceeding memory usage of %.1f GiB>",
+                             self.id, self.queueid, rss/1048576, MEM_MAX/1048576)
                 global bg_redis_write, bg_submit_wf
                 global TASK_TYPE
                 if TASK_TYPE != 'single':

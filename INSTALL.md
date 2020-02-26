@@ -54,6 +54,10 @@ your API KEY for WildFire and the Redis access.
     systemctl enable wildfire-milter
     systemctl enable wfverdictchange.timer
 
+From version 0.1-post33 Wildfire Milter integrates with Systemd notify. Because `python3-systemd`
+is not easy to find on EL7, you could need an EL8 based OS to install the higher releases of this
+milter.
+
 # Configuration
 You must at least configure in *milter.conf* the `Redis:` section and the `Wildfire:` section.
 If you didn't install from **yum**, you have to create the `TMPDIR`.

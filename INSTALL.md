@@ -79,3 +79,6 @@ You can change this parameter in `wildfire-milter.service` systemd file:
 	[Service]
 	...
 	MemoryLimit=3G
+
+From version 0.1-post37 the Milter dies if the memory usage is higher than `MAX_RSS` config parameter.
+In this case systemd can restart the milter _on_failure_.

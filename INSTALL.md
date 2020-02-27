@@ -58,6 +58,10 @@ From version 0.1-post33 Wildfire Milter integrates with Systemd notify. Because 
 is not easy to find on EL7, you could need an EL8 based OS to install the higher releases of this
 milter.
 
+If someone is interested to install wildfire-milter in Red Hat EL7 using yum could write me directly,
+I can provide a python-systemd rpm file for EL7 and python3.6.
+ All other dependencies working for EL8 are suitable for EL7 too.
+
 # Configuration
 You must at least configure in *milter.conf* the `Redis:` section and the `Wildfire:` section.
 If you didn't install from **yum**, you have to create the `TMPDIR`.
